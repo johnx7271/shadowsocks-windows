@@ -5,12 +5,11 @@ using System.Linq;
 using System.Net.NetworkInformation;
 using System.Threading;
 using Shadowsocks.Model;
-using System.Reflection;
 using Shadowsocks.Util;
 
 namespace Shadowsocks.Controller
 {
-    class AvailabilityStatistics
+	class AvailabilityStatistics
     {
         private static readonly string StatisticsFilesName = "shadowsocks.availability.csv";
         private static readonly string Delimiter = ",";

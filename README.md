@@ -1,4 +1,4 @@
-Shadowsocks for Windows
+﻿Shadowsocks for Windows
 =======================
 No-Privoxy Version
 
@@ -11,7 +11,7 @@ removed the dependency on Privoxy.  A side-benefit of this removal is a
 shorter path to the final browsing target. In the old version, the path is like this:  
 your browser ->local:1080 by shadowsocks.proxy -> local: 8033 by 
 Privoxy.translator -> local:1080 by shadowsocks.forwarder -> External Socks 
-server -> final target, so you can see it's a really twisted path. In the No-Privoxy 
+server -> final target, so you can see its a really twisted path. In the No-Privoxy 
 version, the path is shortened.
 Another external dependency is libsscrypto, and I happily found it to be another 
 project on git, it's here: https://github.com/shadowsocks/libsscrypto . So I kept it.
@@ -111,6 +111,4 @@ GPLv3
 [latest release]: https://github.com/shadowsocks/shadowsocks-csharp/releases
 [GFWList]:        https://github.com/gfwlist/gfwlist
 [Servers]:        https://github.com/shadowsocks/shadowsocks/wiki/Ports-and-Clients#linux--server-side
-[中文说明]:       https://github.com/shadowsocks/shadowsocks-windows/wiki/Shadowsocks-Windows-%E4%BD%BF
-
-%E7%94%A8%E8%AF%B4%E6%98%8E
+[中文说明]:       https://github.com/shadowsocks/shadowsocks-windows/wiki/Shadowsocks-Windows-%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E
