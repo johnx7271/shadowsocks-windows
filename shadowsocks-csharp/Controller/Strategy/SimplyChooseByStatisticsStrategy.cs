@@ -140,9 +140,7 @@ namespace Shadowsocks.Controller.Strategy
             {
                 ChooseNewServer(_controller.GetCurrentConfiguration().configs);
             }
-            if (oldServer != _currentServer)
-            {
-            }
+           
             return _currentServer;  //current server cached for CachedInterval
         }
 

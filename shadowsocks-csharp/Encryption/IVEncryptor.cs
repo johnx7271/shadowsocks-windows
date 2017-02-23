@@ -1,38 +1,46 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
+using System.Net;
 
 namespace Shadowsocks.Encryption
 {
     public abstract class IVEncryptor
         : EncryptorBase
     {
-        protected static byte[] tempbuf = new byte[MAX_INPUT_SIZE];
+		public const int MAX_KEY_LENGTH = 64;
+		public const int MAX_IV_LENGTH = 16;
 
-        protected Dictionary<string, int[]> ciphers;
+		protected static byte[] tempbuf = new byte[MAX_INPUT_SIZE];
 
-        private static readonly Dictionary<string, byte[]> CachedKeys = new Dictionary<string, byte[]>();
+        protected Dictionary<string, EncryptorInfo> ciphers;
+
+        private static readonly ConcurrentDictionary<string, byte[]> CachedKeys = new ConcurrentDictionary<string, byte[]>();
         protected byte[] _encryptIV;
         protected byte[] _decryptIV;
         protected bool _decryptIVReceived;
         protected bool _encryptIVSent;
-        protected int _encryptIVOffset = 0;
-        protected int _decryptIVOffset = 0;
-        protected string _method;
+
+		protected int _encryptIVOffset = 0;
+		protected int _decryptIVOffset = 0;
+
+		protected string _method;
         protected int _cipher;
-        protected int[] _cipherInfo;
+
+        protected EncryptorInfo _cipherInfo;
         protected byte[] _key;
         protected int keyLen;
         protected int ivLen;
 
-        public IVEncryptor(string method, string password)
-            : base(method, password)
+        public IVEncryptor(string method, string password, bool onetimeauth)
+            : base(method, password, onetimeauth)
         {
             InitKey(method, password);
         }
 
-        protected abstract Dictionary<string, int[]> getCiphers();
+        protected abstract Dictionary<string, EncryptorInfo> getCiphers();
 
         protected void InitKey(string method, string password)
         {
@@ -41,25 +49,21 @@ namespace Shadowsocks.Encryption
             string k = method + ":" + password;
             ciphers = getCiphers();
             _cipherInfo = ciphers[_method];
-            _cipher = _cipherInfo[2];
+            _cipher = _cipherInfo.Type;
             if (_cipher == 0)
             {
                 throw new Exception("method not found");
             }
-            keyLen = ciphers[_method][0];
-            ivLen = ciphers[_method][1];
-            if (CachedKeys.ContainsKey(k))
-            {
-                _key = CachedKeys[k];
-            }
-            else
-            {
-                byte[] passbuf = Encoding.UTF8.GetBytes(password);
-                _key = new byte[32];
-                byte[] iv = new byte[16];
-                bytesToKey(passbuf, _key);
-                CachedKeys[k] = _key;
-            }
+            keyLen = _cipherInfo.KeySize;
+            ivLen = _cipherInfo.IvSize;
+
+			_key = CachedKeys.GetOrAdd(k, (nk) =>
+			{
+				byte[] passbuf = Encoding.UTF8.GetBytes(password);
+				byte[] key = new byte[32];
+				bytesToKey(passbuf, key);
+				return key;
+			});
         }
 
         protected void bytesToKey(byte[] password, byte[] key)
@@ -67,9 +71,10 @@ namespace Shadowsocks.Encryption
             byte[] result = new byte[password.Length + 16];
             int i = 0;
             byte[] md5sum = null;
-            while (i < key.Length)
+			MD5 md5 = MD5.Create();
+
+			while (i < key.Length)
             {
-                MD5 md5 = MD5.Create();
                 if (i == 0)
                 {
                     md5sum = md5.ComputeHash(password);
@@ -83,14 +88,6 @@ namespace Shadowsocks.Encryption
                 md5sum.CopyTo(key, i);
                 i += md5sum.Length;
             }
-        }
-
-        protected static void randBytes(byte[] buf, int length)
-        {
-            byte[] temp = new byte[length];
-            RNGCryptoServiceProvider rngServiceProvider = new RNGCryptoServiceProvider();
-            rngServiceProvider.GetBytes(temp);
-            temp.CopyTo(buf, 0);
         }
 
         protected virtual void initCipher(byte[] iv, bool isCipher)
@@ -112,15 +109,139 @@ namespace Shadowsocks.Encryption
 
         protected abstract void cipherUpdate(bool isCipher, int length, byte[] buf, byte[] outbuf);
 
-        public override void Encrypt(byte[] buf, int length, byte[] outbuf, out int outlength)
+		#region OneTimeAuth
+
+		public const int ONETIMEAUTH_FLAG = 0x10;
+		public const int ADDRTYPE_MASK = 0xEF;
+
+		public const int ONETIMEAUTH_BYTES = 10;
+
+		public const int CLEN_BYTES = 2;
+		public const int AUTH_BYTES = ONETIMEAUTH_BYTES + CLEN_BYTES;
+
+		private uint _otaChunkCounter;
+		private byte[] _otaChunkKeyBuffer;
+
+		protected int OtaGetHeadLen(byte[] buf, int length)
+		{
+			int len = 0;
+			int atyp = length > 0 ? (buf[0] & ADDRTYPE_MASK) : 0;
+			if (atyp == 1)
+			{
+				len = 7; // atyp (1 bytes) + ipv4 (4 bytes) + port (2 bytes)
+			}
+			else if (atyp == 3 && length > 1)
+			{
+				int nameLen = buf[1];
+				len = 4 + nameLen; // atyp (1 bytes) + name length (1 bytes) + name (n bytes) + port (2 bytes)
+			}
+			else if (atyp == 4)
+			{
+				len = 19; // atyp (1 bytes) + ipv6 (16 bytes) + port (2 bytes)
+			}
+			if (len == 0 || len > length)
+				throw new Exception($"invalid header with addr type {atyp}");
+			return len;
+		}
+
+		private byte[] OtaGenHash(byte[] msg, int msg_len)
+		{
+			byte[] auth = new byte[ONETIMEAUTH_BYTES];
+			byte[] hash = new byte[20];
+			byte[] auth_key = new byte[MAX_IV_LENGTH + MAX_KEY_LENGTH];
+			Buffer.BlockCopy(_encryptIV, 0, auth_key, 0, ivLen);
+			Buffer.BlockCopy(_key, 0, auth_key, ivLen, keyLen);
+			Sodium.ss_sha1_hmac_ex(auth_key, (uint)(ivLen + keyLen),
+				msg, 0, (uint)msg_len, hash);
+			Buffer.BlockCopy(hash, 0, auth, 0, ONETIMEAUTH_BYTES);
+			return auth;
+		}
+
+		private void OtaUpdateKeyBuffer()
+		{
+			if (_otaChunkKeyBuffer == null)
+			{
+				_otaChunkKeyBuffer = new byte[MAX_IV_LENGTH + 4];
+				Buffer.BlockCopy(_encryptIV, 0, _otaChunkKeyBuffer, 0, ivLen);
+			}
+
+			byte[] counter_bytes = BitConverter.GetBytes((uint)IPAddress.HostToNetworkOrder((int)_otaChunkCounter));
+			Buffer.BlockCopy(counter_bytes, 0, _otaChunkKeyBuffer, ivLen, 4);
+			_otaChunkCounter++;
+		}
+
+		private byte[] OtaGenChunkHash(byte[] buf, int offset, int len)
+		{
+			byte[] hash = new byte[20];
+			OtaUpdateKeyBuffer();
+			Sodium.ss_sha1_hmac_ex(_otaChunkKeyBuffer, (uint)_otaChunkKeyBuffer.Length,
+				buf, offset, (uint)len, hash);
+			return hash;
+		}
+
+		private void OtaAuthBuffer4Tcp(byte[] buf, ref int length)
+		{
+			if (!_encryptIVSent)
+			{
+				int headLen = OtaGetHeadLen(buf, length);
+				int dataLen = length - headLen;
+				buf[0] |= ONETIMEAUTH_FLAG;
+				byte[] hash = OtaGenHash(buf, headLen);
+				Buffer.BlockCopy(buf, headLen, buf, headLen + ONETIMEAUTH_BYTES + AUTH_BYTES, dataLen);
+				Buffer.BlockCopy(hash, 0, buf, headLen, ONETIMEAUTH_BYTES);
+
+				if (dataLen == 0)
+				{
+					length = headLen + ONETIMEAUTH_BYTES;
+				}
+				else
+				{
+					hash = OtaGenChunkHash(buf, headLen + ONETIMEAUTH_BYTES + AUTH_BYTES, dataLen);
+					Buffer.BlockCopy(hash, 0, buf, headLen + ONETIMEAUTH_BYTES + CLEN_BYTES, ONETIMEAUTH_BYTES);
+					byte[] lenBytes = BitConverter.GetBytes((ushort)IPAddress.HostToNetworkOrder((short)dataLen));
+					Buffer.BlockCopy(lenBytes, 0, buf, headLen + ONETIMEAUTH_BYTES, CLEN_BYTES);
+					length = headLen + ONETIMEAUTH_BYTES + AUTH_BYTES + dataLen;
+				}
+			}
+			else
+			{
+				byte[] hash = OtaGenChunkHash(buf, 0, length);
+				Buffer.BlockCopy(buf, 0, buf, AUTH_BYTES, length);
+				byte[] lenBytes = BitConverter.GetBytes((ushort)IPAddress.HostToNetworkOrder((short)length));
+				Buffer.BlockCopy(lenBytes, 0, buf, 0, CLEN_BYTES);
+				Buffer.BlockCopy(hash, 0, buf, CLEN_BYTES, ONETIMEAUTH_BYTES);
+				length += AUTH_BYTES;
+			}
+		}
+
+		private void OtaAuthBuffer(byte[] buf, ref int length)
+		{
+			if (OnetimeAuth && ivLen > 0)
+			{
+				OtaAuthBuffer4Tcp(buf, ref length);
+			}
+		}
+
+		#endregion
+
+		static RNGCryptoServiceProvider rngServiceProvider = new RNGCryptoServiceProvider();
+
+		protected static void randBytes(byte[] buf, int length)
+		{
+			rngServiceProvider.GetBytes(buf);
+		}
+
+		public override void Encrypt(byte[] buf, int length, byte[] outbuf, out int outlength)
         {
             if (!_encryptIVSent)
             {
-                _encryptIVSent = true;
+
                 randBytes(outbuf, ivLen);
                 initCipher(outbuf, true);
                 outlength = length + ivLen;
-                lock (tempbuf)
+				OtaAuthBuffer(buf, ref length);
+				_encryptIVSent = true;
+				lock (tempbuf)
                 {
                     cipherUpdate(true, length, buf, tempbuf);
                     outlength = length + ivLen;
@@ -129,7 +250,8 @@ namespace Shadowsocks.Encryption
             }
             else
             {
-                outlength = length;
+				OtaAuthBuffer(buf, ref length);
+				outlength = length;
                 cipherUpdate(true, length, buf, outbuf);
             }
         }

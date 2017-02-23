@@ -2,10 +2,9 @@
 using Shadowsocks.Properties;
 using Shadowsocks.Util;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
+using System.Security.Cryptography;
 
 namespace Shadowsocks.Encryption
 {
@@ -20,7 +19,6 @@ namespace Shadowsocks.Encryption
             try
             {
                 FileManager.UncompressFile(dllPath, Resources.libsscrypto_dll);
-                LoadLibrary(dllPath);
             }
             catch (IOException)
             {
@@ -32,7 +30,7 @@ namespace Shadowsocks.Encryption
             LoadLibrary(dllPath);
         }
 
-        [DllImport("Kernel32.dll")]
+		[DllImport("Kernel32.dll")]
         private static extern IntPtr LoadLibrary(string path);
 
         [DllImport(DLLNAME, CallingConvention = CallingConvention.Cdecl)]
@@ -40,5 +38,13 @@ namespace Shadowsocks.Encryption
 
         [DllImport(DLLNAME, CallingConvention = CallingConvention.Cdecl)]
         public extern static void crypto_stream_chacha20_xor_ic(byte[] c, byte[] m, ulong mlen, byte[] n, ulong ic, byte[] k);
-    }
+
+		public static void ss_sha1_hmac_ex(byte[] key, uint keylen,
+			byte[] input, int ioff, uint ilen, byte[] output)
+		{
+			HMACSHA1 hmac = new HMACSHA1(key, false);
+			byte[] hash = hmac.ComputeHash(input, ioff, (int)ilen);
+			Array.Copy(hash, 0, output, 0, output.Length);
+		}
+	}
 }

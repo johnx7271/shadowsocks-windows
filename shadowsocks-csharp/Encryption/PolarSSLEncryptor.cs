@@ -16,18 +16,17 @@ namespace Shadowsocks.Encryption
         private IntPtr _encryptCtx = IntPtr.Zero;
         private IntPtr _decryptCtx = IntPtr.Zero;
 
-        public PolarSSLEncryptor(string method, string password)
-            : base(method, password)
+        public PolarSSLEncryptor(string method, string password, bool onetimeauth)
+            : base(method, password, onetimeauth)
         {
-            InitKey(method, password);
         }
 
-        private static Dictionary<string, int[]> _ciphers = new Dictionary<string, int[]> {
-                {"aes-128-cfb", new int[]{16, 16, CIPHER_AES, PolarSSL.AES_CTX_SIZE}},
-                {"aes-192-cfb", new int[]{24, 16, CIPHER_AES, PolarSSL.AES_CTX_SIZE}},
-                {"aes-256-cfb", new int[]{32, 16, CIPHER_AES, PolarSSL.AES_CTX_SIZE}},
-                {"rc4", new int[]{16, 0, CIPHER_RC4, PolarSSL.ARC4_CTX_SIZE}},
-                {"rc4-md5", new int[]{16, 16, CIPHER_RC4, PolarSSL.ARC4_CTX_SIZE}},
+        private static Dictionary<string, EncryptorInfo> _ciphers = new Dictionary<string, EncryptorInfo> {
+                {"aes-128-cfb", new EncryptorInfo("AES-128-CFB128", 16, 16, CIPHER_AES, PolarSSL.AES_CTX_SIZE) },
+                {"aes-192-cfb", new EncryptorInfo("AES-192-CFB128", 24, 16, CIPHER_AES, PolarSSL.AES_CTX_SIZE) },
+                {"aes-256-cfb", new EncryptorInfo("AES-256-CFB128", 32, 16, CIPHER_AES, PolarSSL.AES_CTX_SIZE) },
+                {"rc4", new EncryptorInfo("RC4-128", 16, 0, CIPHER_RC4, PolarSSL.ARC4_CTX_SIZE) },
+                {"rc4-md5", new EncryptorInfo("ARC4-128", 16, 16, CIPHER_RC4, PolarSSL.ARC4_CTX_SIZE) }
         };
 
         public static List<string> SupportedCiphers()
@@ -35,7 +34,7 @@ namespace Shadowsocks.Encryption
             return new List<string>(_ciphers.Keys);
         }
 
-        protected override Dictionary<string, int[]> getCiphers()
+        protected override Dictionary<string, EncryptorInfo> getCiphers()
         {
             return _ciphers;
         }
@@ -45,7 +44,7 @@ namespace Shadowsocks.Encryption
             base.initCipher(iv, isCipher);
 
             IntPtr ctx;
-            ctx = Marshal.AllocHGlobal(_cipherInfo[3]);
+            ctx = Marshal.AllocHGlobal(_cipherInfo.CtxSize);
             if (isCipher)
             {
                 _encryptCtx = ctx;

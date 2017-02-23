@@ -138,7 +138,7 @@ namespace Shadowsocks.Controller
             {
                 throw new ArgumentException("No server configured");
             }
-            this.encryptor = EncryptorFactory.GetEncryptor(server.method, server.password);
+            this.encryptor = EncryptorFactory.GetEncryptor(server.method, server.password, server.one_time_auth);
             this.server = server;
         }
 
@@ -160,27 +160,25 @@ namespace Shadowsocks.Controller
 
         public void Close()
         {
-            lock (relay.Handlers)
-            {
-                Logging.Debug($"connections: {relay.Handlers.Count}");
-                relay.Handlers.Remove(this);
-            }
             lock (this)
             {
-                if (closed)
-                {
-                    return;
-                }
+                if (closed) return;                
                 closed = true;
             }
-            if (connection != null)
+
+			Logging.Debug($"connections: {relay.Handlers.Count}");
+			lock (relay.Handlers)			
+				relay.Handlers.Remove(this);
+			
+			if (connection != null)
             {
                 try
                 {
                     connection.Shutdown(SocketShutdown.Both);
                     connection.Close();
-                }
-                catch (Exception e)
+					connection = null;
+				}
+				catch (Exception e)
                 {
                     Logging.LogUsefulException(e);
                 }
@@ -191,7 +189,9 @@ namespace Shadowsocks.Controller
                 {
                     remote.Shutdown(SocketShutdown.Both);
                     remote.Close();
-                }
+					remote = null;
+
+				}
                 catch (Exception e)
                 {
                     Logging.LogUsefulException(e);
@@ -202,7 +202,8 @@ namespace Shadowsocks.Controller
                 if (encryptor != null)
                 {
                     ((IDisposable)encryptor).Dispose();
-                }
+					encryptor = null;
+				}
             }
         }
 
@@ -312,8 +313,12 @@ namespace Shadowsocks.Controller
                     else if (command == 3)
                     {
                         HandleUDPAssociate();
-                    }
-                }
+                    } else
+					{
+						Console.WriteLine("Unsupported CMD=" + command);
+						Close();
+					}
+				}
                 else
                 {
                     Console.WriteLine("failed to recv data in handshakeReceive2Callback");

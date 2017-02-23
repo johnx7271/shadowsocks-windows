@@ -92,16 +92,24 @@ namespace Shadowsocks.Controller
 
         public static void LogNetTraffic(string msg)
         {
-            GetLogStream().WriteLine(StreamWriterWithTimestamp.GetTimestamp() + msg);
+			msg = StreamWriterWithTimestamp.GetTimestamp() + msg;
+			StreamWriter sw = GetLogStream();
+			lock (sw){
+				sw.WriteLine(msg);
+			}
         }
 
         public static void LogNetTraffic(byte[] msgbin)
         {
-            string msg = Hex.EncodeHexStringTrimTrail(msgbin);
-            GetLogStream().WriteLine(StreamWriterWithTimestamp.GetTimestamp() + msg);
-        }
+            string msg = StreamWriterWithTimestamp.GetTimestamp() + Hex.EncodeHexStringTrimTrail(msgbin);
+			StreamWriter sw = GetLogStream();
+			lock (sw)
+			{
+				sw.WriteLine(msg);
+			}
+		}
 
-        static void Cleanup(object sender, System.EventArgs arg)
+		static void Cleanup(object sender, System.EventArgs arg)
         {
             if(TrLogStream != null)
                 TrLogStream.Dispose();
