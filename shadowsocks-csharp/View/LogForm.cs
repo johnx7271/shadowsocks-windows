@@ -1,18 +1,13 @@
 ﻿using Shadowsocks.Controller;
 using Shadowsocks.Properties;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Windows.Forms;
 
 namespace Shadowsocks.View
 {
-    public partial class LogForm : Form
+	public partial class LogForm : Form
     {
         long lastOffset;
         string filename;
@@ -129,7 +124,9 @@ namespace Shadowsocks.View
 
         private void CleanLogsButton_Click(object sender, EventArgs e)
         {
+            Logging.ReOpenLogFile();
             LogMessageTextBox.Clear();
+            lastOffset = 0;
         }
 
         private void ChangeFontButton_Click(object sender, EventArgs e)

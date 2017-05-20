@@ -131,7 +131,7 @@ namespace Shadowsocks.Controller
 
         private DateTime _startConnectTime;
 
-        public void CreateRemote()
+        private void PickupServer()
         {
             Server server = controller.GetAServer(IStrategyCallerType.TCP, (IPEndPoint)connection.RemoteEndPoint);
             if (server == null || server.server == "")
@@ -419,9 +419,11 @@ namespace Shadowsocks.Controller
 
         private void StartConnect()
         {
+            if (closed) return;
+
             try
             {
-                CreateRemote();
+                PickupServer();
 
                 // TODO async resolving
                 IPAddress ipAddress;
@@ -525,8 +527,9 @@ namespace Shadowsocks.Controller
 
                 StartPipe();
             }
-            catch (ArgumentException)
+            catch (ArgumentException e)
             {
+				int i = 1;	
             }
             catch (Exception e)
             {
@@ -558,7 +561,7 @@ namespace Shadowsocks.Controller
             }
             catch (Exception e)
             {
-                Logging.LogUsefulException(e);
+                Logging.LogUsefulException("StartPipe.", e);
                 this.Close();
             }
         }
@@ -618,8 +621,9 @@ namespace Shadowsocks.Controller
             }
             catch (Exception e)
             {
-                Logging.LogUsefulException(e);
-                this.Close();
+                Logging.LogUsefulException("PipeRemoteReceive.", e);
+
+				this.Close();
             }
         }
 
@@ -669,7 +673,7 @@ namespace Shadowsocks.Controller
             }
             catch (Exception e)
             {
-                Logging.LogUsefulException(e);
+                Logging.LogUsefulException("PipeConnectionReceive.", e);
                 this.Close();
             }
         }
@@ -688,8 +692,9 @@ namespace Shadowsocks.Controller
             }
             catch (Exception e)
             {
-                Logging.LogUsefulException(e);
-                this.Close();
+                Logging.LogUsefulException("PipeRemoteSend.", e);
+
+				this.Close();
             }
         }
 
@@ -707,8 +712,9 @@ namespace Shadowsocks.Controller
             }
             catch (Exception e)
             {
-                Logging.LogUsefulException(e);
-                this.Close();
+                Logging.LogUsefulException("PipeConnectionSend.", e);
+
+				this.Close();
             }
         }
     }

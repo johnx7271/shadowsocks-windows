@@ -16,11 +16,11 @@ namespace Shadowsocks.Controller
 
         private static StreamWriter TrLogStream = null;
 
-        private static StreamWriter GetLogStream()
+        private static StreamWriter GetTrLogStream()
         {
             if(TrLogStream == null)
             {
-                TrLogStream = new StreamWriter(File.Open(TrafficLogFile, FileMode.Append, FileAccess.Write, FileShare.Read));
+                TrLogStream = new StreamWriter(File.Open(TrafficLogFile, FileMode.Create, FileAccess.Write, FileShare.Read));
 
                 TrLogStream.WriteLine("New round of net traffic logging:" + DateTime.Now.ToString());
 
@@ -49,6 +49,37 @@ namespace Shadowsocks.Controller
             }
         }
 
+        /// <summary>
+        /// clear old log, re-open it.
+        /// </summary>
+        /// <returns></returns>
+        public static bool ReOpenLogFile()
+        {
+            try
+            {
+                TextWriter fold = Console.Out;
+                // before closing, dis-connect it. 
+                StreamWriter stdin = new StreamWriter(Console.OpenStandardOutput());
+                Console.SetOut(stdin);
+                Console.SetError(stdin);
+
+                fold.Close();
+
+                FileStream fs = new FileStream(LogFile, FileMode.Create);
+                StreamWriterWithTimestamp sw = new StreamWriterWithTimestamp(fs);
+                sw.AutoFlush = true;
+                Console.SetOut(sw);
+                Console.SetError(sw);
+
+                return true;
+            }
+            catch (IOException e)
+            {
+                Console.WriteLine(e.ToString());
+                return false;
+            }
+        }
+
         public static void Debug(object o)
         {
 
@@ -57,43 +88,92 @@ namespace Shadowsocks.Controller
 #endif
         }
 
+        public static void WriteLine(string s)
+        {
+            Console.WriteLine(s);
+        }
+
+
         public static void LogUsefulException(Exception e)
         {
             // just log useful exceptions, not all of them
             if (e is SocketException)
             {
                 SocketException se = (SocketException)e;
-                if (se.SocketErrorCode == SocketError.ConnectionAborted)
+
+				if (se.SocketErrorCode == SocketError.ConnectionAborted)
                 {
-                    // closed by browser when sending
-                    // normally happens when download is canceled or a tab is closed before page is loaded
-                }
-                else if (se.SocketErrorCode == SocketError.ConnectionReset)
+					// closed by browser when sending
+					// normally happens when download is canceled or a tab is closed before page is loaded
+					Console.WriteLine("ConnectionAborted.");
+				}
+				else if (se.SocketErrorCode == SocketError.ConnectionReset)
                 {
-                    // received rst
-                }
-                else if (se.SocketErrorCode == SocketError.NotConnected)
+					Console.WriteLine("ConnectionReset.");
+				}
+				else if (se.SocketErrorCode == SocketError.NotConnected)
                 {
-                    // close when not connected
-                }
-                else
+					// close when not connected
+					Console.WriteLine("NotConnected.");
+				}
+				else
                 {
                     Console.WriteLine(e);
                 }
             }
             else if (e is ObjectDisposedException)
             {
-            }
+				Console.WriteLine("ObjectDisposedException.");
+			}
             else
             {
                 Console.WriteLine(e);
             }
         }
 
-        public static void LogNetTraffic(string msg)
+		public static void LogUsefulException(string ctx, Exception e)
+		{
+			// just log useful exceptions, not all of them
+			if (e is SocketException)
+			{
+				SocketException se = (SocketException)e;
+
+				if (se.SocketErrorCode == SocketError.ConnectionAborted)
+				{
+					// closed by browser when sending
+					// normally happens when download is canceled or a tab is closed before page is loaded
+					Console.WriteLine(ctx + " ConnectionAborted.");
+				}
+				else if (se.SocketErrorCode == SocketError.ConnectionReset)
+				{
+					Console.WriteLine(ctx + " ConnectionReset.");
+				}
+				else if (se.SocketErrorCode == SocketError.NotConnected)
+				{
+					// close when not connected
+					Console.WriteLine(ctx + " NotConnected.");
+				}
+				else
+				{
+					Console.WriteLine(ctx);
+					Console.WriteLine(e);
+				}
+			}
+			else if (e is ObjectDisposedException)
+			{
+				Console.WriteLine(ctx + " ObjectDisposedException.");
+			}
+			else
+			{
+				Console.WriteLine(ctx);
+				Console.WriteLine(e);
+			}
+		}
+
+		public static void LogNetTraffic(string msg)
         {
 			msg = StreamWriterWithTimestamp.GetTimestamp() + msg;
-			StreamWriter sw = GetLogStream();
+			StreamWriter sw = GetTrLogStream();
 			lock (sw){
 				sw.WriteLine(msg);
 			}
@@ -102,7 +182,7 @@ namespace Shadowsocks.Controller
         public static void LogNetTraffic(byte[] msgbin)
         {
             string msg = StreamWriterWithTimestamp.GetTimestamp() + Hex.EncodeHexStringTrimTrail(msgbin);
-			StreamWriter sw = GetLogStream();
+			StreamWriter sw = GetTrLogStream();
 			lock (sw)
 			{
 				sw.WriteLine(msg);
