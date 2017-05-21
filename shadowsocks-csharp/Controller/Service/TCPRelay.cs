@@ -454,7 +454,11 @@ namespace Shadowsocks.Controller
             catch (Exception e)
             {
                 Logging.LogUsefulException(e);
-                this.Close();
+				IStrategy strategy = controller.GetCurrentStrategy();
+				if (strategy != null)
+					strategy.SetFailure(server);
+
+				this.Close();
             }
         }
 
