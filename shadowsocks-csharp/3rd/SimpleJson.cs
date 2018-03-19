@@ -58,6 +58,7 @@ using System.Reflection.Emit;
 using System.Runtime.Serialization;
 #endif
 using System.Text;
+using System.Threading;
 using SimpleJson.Reflection;
 using System.Threading;
 
