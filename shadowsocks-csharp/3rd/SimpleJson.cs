@@ -1062,22 +1062,60 @@ namespace SimpleJson
             return TOKEN_NONE;
         }
 
-        protected static bool SerializeObject(IJsonSerializerStrategy jsonSerializerStrategy, object value, StringBuilder builder)
+		static public bool GetGenericIDicKV(object obj, out IEnumerable keys, out IEnumerable values)
+		{
+			if (obj == null)
+				goto setnullandreturn;
+			Type tt = obj.GetType();
+			if (!tt.IsGenericType)
+				goto setnullandreturn;
+
+			Type[] its = obj.GetType().GetInterfaces();
+			Type dicinterface = typeof(IDictionary<,>);
+			foreach (Type intf in its)
+			{
+				if (intf.IsGenericType && intf.GetGenericTypeDefinition() == dicinterface)
+				{
+					keys = (IEnumerable)intf.GetProperty("Keys").GetValue(obj);
+					values = (IEnumerable)intf.GetProperty("Values").GetValue(obj);
+					return true;
+				}
+			}
+	setnullandreturn:
+			keys = null;
+			values = null;
+			return false;
+		}		
+
+		protected static bool SerializeObject(IJsonSerializerStrategy jsonSerializerStrategy, object value, StringBuilder builder)
         {
             bool success = true;
 
             if (value is string)
-                success = SerializeString((string)value, builder);
-            else if (value is IDictionary<string, object>)
-            {
-                IDictionary<string, object> dict = (IDictionary<string, object>)value;
-                success = SerializeMap(jsonSerializerStrategy, dict.Keys, dict.Values, builder);
-            }
-            else if (value is IDictionary<string, string>)
-            {
-                IDictionary<string, string> dict = (IDictionary<string, string>)value;
-                success = SerializeMap(jsonSerializerStrategy, dict.Keys, dict.Values, builder);
-            }
+                return SerializeString((string)value, builder);
+
+			IEnumerable keys;
+			IEnumerable values;
+			bool isGenericIDic = GetGenericIDicKV(value, out keys, out values );
+			if (isGenericIDic)
+			{
+				success = SerializeMap(jsonSerializerStrategy, keys, values, builder);
+			}
+			else if (value is IDictionary)
+			{
+				IDictionary dict = (IDictionary)value;
+				success = SerializeMap(jsonSerializerStrategy, dict.Keys, dict.Values, builder);
+			}
+			// else if (value is IDictionary<string, object>)
+   //         {
+   //             IDictionary<string, object> dict = (IDictionary<string, object>)value;
+   //             success = SerializeMap(jsonSerializerStrategy, dict.Keys, dict.Values, builder);
+   //         }
+   //         else if (value is IDictionary<string, string>)
+   //         {
+   //             IDictionary<string, string> dict = (IDictionary<string, string>)value;
+   //             success = SerializeMap(jsonSerializerStrategy, dict.Keys, dict.Values, builder);
+   //         }
             else if (value is IEnumerable)
                 success = SerializeArray(jsonSerializerStrategy, (IEnumerable)value, builder);
             else if (IsNumeric(value))
@@ -1416,13 +1454,14 @@ namespace SimpleJson
 
                     if (ReflectionUtils.IsTypeDictionary(type))
                     {
-                        // if dictionary then
+						// if dictionary then
 #if NETFX_CORE
 						Type keyType = type.GetTypeInfo().GenericTypeArguments[0];
 						Type valueType = type.GetTypeInfo().GenericTypeArguments[1];
 #else
-                        Type keyType = type.GetGenericArguments()[0];
-                        Type valueType = type.GetGenericArguments()[1];
+						Type[] targs = type.GetGenericArguments();
+                        Type keyType = targs[0];
+                        Type valueType = targs[1];
 #endif
 
                         Type genericType = typeof(Dictionary<,>).MakeGenericType(keyType, valueType);
