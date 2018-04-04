@@ -1,5 +1,4 @@
 ﻿using System;
-using System;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
@@ -449,7 +448,7 @@ namespace test
 			CompressFile(@"D:\websites\ShadowSocks\shadowsocks-csharp\bin\Release\pac.txt", @"D:\websites\ShadowSocks\shadowsocks-csharp\bin\Release\pac.txt.gz");
 
 			string f1, f2;
-			f1 = @"..\..\..\shadowsocks-csharp\Data\x32\libsscrypto.dll";
+			f1 = @"..\..\..\shadowsocks-csharp\Data\x86\libsscrypto.dll";
 			f2 = @"..\..\..\shadowsocks-csharp\Data\libsscrypto.dll.gz";
 
 			CompressFile(f1, f2);

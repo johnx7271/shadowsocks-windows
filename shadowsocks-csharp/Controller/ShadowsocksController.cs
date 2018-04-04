@@ -292,7 +292,7 @@ namespace Shadowsocks.Controller
             StopPlugins();
             if (_config.enabled)
             {
-                SystemProxy.Update(_config, true);
+                SystemProxy.Update(_config, true, _pacServer.PacSecret);
             }
             Encryption.RNG.Close();
         }
@@ -561,8 +561,8 @@ namespace Shadowsocks.Controller
         }
 
         private void UpdateSystemProxy()
-        {
-            SystemProxy.Update(_config, false);
+		{ // assuming _pacServer.UpdateConfiguration has been called or no change to it b4 entering this
+			SystemProxy.Update(_config, false, _pacServer.PacSecret);
         }
 
         private void pacServer_PACFileChanged(object sender, EventArgs e)

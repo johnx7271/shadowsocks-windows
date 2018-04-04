@@ -24,7 +24,7 @@ namespace Shadowsocks.Controller
 			_refreshReturn = InternetSetOption(IntPtr.Zero, INTERNET_OPTION_REFRESH, IntPtr.Zero, 0);
 		}
 
-		public static void Update(Configuration config, bool forceDisable)
+		public static void Update(Configuration config, bool forceDisable, string pacSecret)
 		{
 			bool global = config.global;
 			bool enabled = config.enabled;
@@ -50,8 +50,9 @@ namespace Shadowsocks.Controller
 						string pacUrl;
 						if (config.useOnlinePac && !string.IsNullOrEmpty(config.pacUrl))
 							pacUrl = config.pacUrl;
-						else
-							pacUrl = "http://127.0.0.1:" + config.localPort.ToString() + "/pac?t=" + GetTimestamp(DateTime.Now);
+						else						
+							pacUrl = $"http://127.0.0.1:{config.localPort}/pac?t={GetTimestamp(DateTime.Now)}{pacSecret}";							
+												
 						registry.SetValue("ProxyEnable", 0);
 						var readProxyServer = registry.GetValue("ProxyServer");
 						registry.SetValue("ProxyServer", "");

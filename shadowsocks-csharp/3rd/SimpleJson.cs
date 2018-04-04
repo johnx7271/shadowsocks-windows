@@ -60,7 +60,6 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Threading;
 using SimpleJson.Reflection;
-using System.Threading;
 
 namespace SimpleJson
 {

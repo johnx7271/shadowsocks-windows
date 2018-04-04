@@ -18,7 +18,7 @@ namespace Shadowsocks.Controller
         public const string USER_RULE_FILE = "user-rule.txt";
         public const string USER_ABP_FILE = "abp.txt";
 
-        private string PacSecret { get; set; } = "";
+        internal string PacSecret { get; set; } = "";
 
         public string PacUrl { get; private set; } = "";
 
@@ -68,43 +68,54 @@ namespace Shadowsocks.Controller
             try
             {
                 string request = Encoding.UTF8.GetString(firstPacket, 0, length);
-                string[] lines = request.Split('\r', '\n');
-                bool hostMatch = false, pathMatch = false, useSocks = false;
-                bool secretMatch = PacSecret.IsNullOrEmpty();
-                foreach (string line in lines)
+
+				if (!request.StartsWith("GET", StringComparison.InvariantCultureIgnoreCase))
+					return false;
+				string[] lines = request.Split('\r', '\n');
+				bool hostMatch = false, pathMatch = false, useSocks = true;
+				bool secretMatch = PacSecret.IsNullOrEmpty();
+				int linenum = 0, linecount = lines.Length;
+				string line;
+
+				if (linecount > 0)
+				{
+					line = lines[0];
+					if (line.IndexOf(" /pac?", 3, StringComparison.Ordinal) >= 0)
+					{
+						pathMatch = true;
+						if (!secretMatch)
+						{ // note the current implementation is incomlete, and anyone can get around of it by just not use pac.
+							if (line.IndexOf(PacSecret, 9, StringComparison.Ordinal) >= 0)
+							{
+								secretMatch = true;
+							}
+						}
+					}
+				}
+				if(!secretMatch) return false;
+
+				for (linenum = 1; linenum< linecount; linenum++ )
                 {
+					line = lines[linenum];
                     string[] kv = line.Split(new char[] { ':' }, 2);
                     if (kv.Length == 2)
                     {
                         if (kv[0] == "Host")
                         {
-                            if (kv[1].Trim() == ((IPEndPoint)socket.LocalEndPoint).ToString())
-                            {
-                                hostMatch = true;
-                            }
+							if (kv[1].Trim() == ((IPEndPoint)socket.LocalEndPoint).ToString())
+							{
+								hostMatch = true;
+							}
+							
+							break; // only one host line, no need to continue;
                         }
                         //else if (kv[0] == "User-Agent")
-                        //{
-                        //    // we need to drop connections when changing servers
+                        //{                          
                         //    if (kv[1].IndexOf("Chrome") >= 0)
                         //    {
                         //        useSocks = true;
                         //    }
                         //}
-                    }
-                    else if (kv.Length == 1)
-                    {
-                        if (line.IndexOf("pac", StringComparison.Ordinal) >= 0)
-                        {
-                            pathMatch = true;
-                        }
-                        if (!secretMatch)
-                        {
-                            if(line.IndexOf(PacSecret, StringComparison.Ordinal) >= 0)
-                            {
-                                secretMatch = true;
-                            }
-                        }
                     }
                 }
                 if (hostMatch && pathMatch)
@@ -173,7 +184,7 @@ namespace Shadowsocks.Controller
 
                 IPEndPoint localEndPoint = (IPEndPoint)socket.LocalEndPoint;
 
-                string proxy = GetPACAddress(firstPacket, length, localEndPoint, useSocks);
+                string proxy = GetPACAddress(localEndPoint, useSocks);
 
                 pac = pac.Replace("__PROXY__", proxy);
 
@@ -281,21 +292,8 @@ Connection: Close
         }
         #endregion
 
-        private string GetPACAddress(byte[] requestBuf, int length, IPEndPoint localEndPoint, bool useSocks)
-        {
-            //try
-            //{
-            //    string requestString = Encoding.UTF8.GetString(requestBuf);
-            //    if (requestString.IndexOf("AppleWebKit") >= 0)
-            //    {
-            //        string address = "" + localEndPoint.Address + ":" + config.GetCurrentServer().local_port;
-            //        proxy = "SOCKS5 " + address + "; SOCKS " + address + ";";
-            //    }
-            //}
-            //catch (Exception e)
-            //{
-            //    Logging.LogUsefulException(e);
-            //}
+        private string GetPACAddress(IPEndPoint localEndPoint, bool useSocks)
+        {            
             return (useSocks ? "SOCKS5 " : "PROXY ") + localEndPoint.Address + ":" + this._config.localPort + ";";
         }
     }
