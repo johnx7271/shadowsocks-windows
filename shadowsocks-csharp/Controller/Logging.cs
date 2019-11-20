@@ -1,44 +1,32 @@
-﻿using Shadowsocks.Util;
-using System;
-using System.Windows.Forms;
-using System.Collections.Generic;
+﻿using System;
+using System.ComponentModel;
 using System.IO;
 using System.Net.Sockets;
+using System.Net;
+using System.Diagnostics;
 using System.Text;
+using Shadowsocks.Util;
 
 namespace Shadowsocks.Controller
 {
     public class Logging
     {
-        public static string LogFile = Path.Combine(Utils.GetTempPath(), "shadowsocks.log");
+        public static string LogFilePath;
 
-        private static string TrafficLogFile = Path.Combine(Application.StartupPath, "shadowsocks-tr.log");
+        private static FileStream _fs;
+        private static StreamWriterWithTimestamp _sw;
 
-        private static StreamWriter TrLogStream = null;
-
-        private static StreamWriter GetTrLogStream()
-        {
-            if(TrLogStream == null)
-            {
-                TrLogStream = new StreamWriter(File.Open(TrafficLogFile, FileMode.Create, FileAccess.Write, FileShare.Read));
-
-                TrLogStream.WriteLine("New round of net traffic logging:" + DateTime.Now.ToString());
-
-                Application.ApplicationExit += Cleanup;
-            }
-
-            return TrLogStream;
-        }
-                
         public static bool OpenLogFile()
         {
             try
             {
-                FileStream fs = new FileStream(LogFile, FileMode.Append);
-                StreamWriterWithTimestamp sw = new StreamWriterWithTimestamp(fs);
-                sw.AutoFlush = true;
-                Console.SetOut(sw);
-                Console.SetError(sw);
+                LogFilePath = Utils.GetTempPath("shadowsocks.log");
+
+                _fs = new FileStream(LogFilePath, FileMode.Append);
+                _sw = new StreamWriterWithTimestamp(_fs);
+                _sw.AutoFlush = true;
+                Console.SetOut(_sw);
+                Console.SetError(_sw);
 
                 return true;
             }
@@ -49,50 +37,70 @@ namespace Shadowsocks.Controller
             }
         }
 
-        /// <summary>
-        /// clear old log, re-open it.
-        /// </summary>
-        /// <returns></returns>
-        public static bool ReOpenLogFile()
+        private static void WriteToLogFile(object o)
         {
-            try
-            {
-                TextWriter fold = Console.Out;
-                // before closing, dis-connect it. 
-                StreamWriter stdin = new StreamWriter(Console.OpenStandardOutput());
-                Console.SetOut(stdin);
-                Console.SetError(stdin);
-
-                fold.Close();
-
-                FileStream fs = new FileStream(LogFile, FileMode.Create);
-                StreamWriterWithTimestamp sw = new StreamWriterWithTimestamp(fs);
-                sw.AutoFlush = true;
-                Console.SetOut(sw);
-                Console.SetError(sw);
-
-                return true;
-            }
-            catch (IOException e)
-            {
-                Console.WriteLine(e.ToString());
-                return false;
+            try {
+                Console.WriteLine(o);
+            } catch(ObjectDisposedException) {
             }
         }
 
+        public static void Error(object o)
+        {
+            WriteToLogFile("[E] " + o);
+        }
+
+        public static void Info(object o)
+        {
+            WriteToLogFile(o);
+        }
+
+        public static void Clear() {
+			//TODO: what about the redicted stdout?
+            _sw.Close();
+            _sw.Dispose();
+            _fs.Close();
+            _fs.Dispose();
+            File.Delete(LogFilePath);
+            OpenLogFile();
+        }
+
+        [Conditional("DEBUG")]
         public static void Debug(object o)
         {
-
-#if DEBUG
-            Console.WriteLine(o);
-#endif
+            WriteToLogFile("[D] " + o);
         }
 
-        public static void WriteLine(string s)
+        [Conditional("DEBUG")]
+        public static void Dump(string tag, byte[] arr, int length)
         {
-            Console.WriteLine(s);
+            var sb = new StringBuilder($"{Environment.NewLine}{tag}: ");
+            for (int i = 0; i < length - 1; i++) {
+                sb.Append($"0x{arr[i]:X2}, ");
+            }
+            sb.Append($"0x{arr[length - 1]:X2}");
+            sb.Append(Environment.NewLine);
+            Debug(sb.ToString());
         }
 
+        [Conditional("DEBUG")]
+        public static void Debug(EndPoint local, EndPoint remote, int len, string header = null, string tailer = null)
+        {
+            if (header == null && tailer == null)
+                Debug($"{local} => {remote} (size={len})");
+            else if (header == null && tailer != null)
+                Debug($"{local} => {remote} (size={len}), {tailer}");
+            else if (header != null && tailer == null)
+                Debug($"{header}: {local} => {remote} (size={len})");
+            else
+                Debug($"{header}: {local} => {remote} (size={len}), {tailer}");
+        }
+
+        [Conditional("DEBUG")]
+        public static void Debug(Socket sock, int len, string header = null, string tailer = null)
+        {
+            Debug(sock.LocalEndPoint, sock.RemoteEndPoint, len, header, tailer);
+        }
 
         public static void LogUsefulException(Exception e)
         {
@@ -100,100 +108,52 @@ namespace Shadowsocks.Controller
             if (e is SocketException)
             {
                 SocketException se = (SocketException)e;
-
-				if (se.SocketErrorCode == SocketError.ConnectionAborted)
+                if (se.SocketErrorCode == SocketError.ConnectionAborted)
                 {
-					// closed by browser when sending
-					// normally happens when download is canceled or a tab is closed before page is loaded
-					Console.WriteLine("ConnectionAborted.");
-				}
-				else if (se.SocketErrorCode == SocketError.ConnectionReset)
+                    // closed by browser when sending
+                    // normally happens when download is canceled or a tab is closed before page is loaded
+                }
+                else if (se.SocketErrorCode == SocketError.ConnectionReset)
                 {
-					Console.WriteLine("ConnectionReset.");
-				}
-				else if (se.SocketErrorCode == SocketError.NotConnected)
+                    // received rst
+                }
+                else if (se.SocketErrorCode == SocketError.NotConnected)
                 {
-					// close when not connected
-					Console.WriteLine("NotConnected.");
-				}
-				else
+                    // The application tried to send or receive data, and the System.Net.Sockets.Socket is not connected.
+                }
+                else if (se.SocketErrorCode == SocketError.HostUnreachable)
                 {
-                    Console.WriteLine(e);
+                    // There is no network route to the specified host.
+                }
+                else if (se.SocketErrorCode == SocketError.TimedOut)
+                {
+                    // The connection attempt timed out, or the connected host has failed to respond.
+                }
+                else
+                {
+                    Info(e);
                 }
             }
             else if (e is ObjectDisposedException)
             {
-				Console.WriteLine("ObjectDisposedException.");
-			}
+            }
+            else if (e is Win32Exception)
+            {
+                var ex = (Win32Exception) e;
+
+                // Win32Exception (0x80004005): A 32 bit processes cannot access modules of a 64 bit process.
+                if ((uint) ex.ErrorCode != 0x80004005)
+                {
+                    Info(e);
+                }
+            }
             else
             {
-                Console.WriteLine(e);
+                Info(e);
             }
         }
 
-		public static void LogUsefulException(string ctx, Exception e)
-		{
-			// just log useful exceptions, not all of them
-			if (e is SocketException)
-			{
-				SocketException se = (SocketException)e;
-
-				if (se.SocketErrorCode == SocketError.ConnectionAborted)
-				{
-					// closed by browser when sending
-					// normally happens when download is canceled or a tab is closed before page is loaded
-					Console.WriteLine(ctx + " ConnectionAborted.");
-				}
-				else if (se.SocketErrorCode == SocketError.ConnectionReset)
-				{
-					Console.WriteLine(ctx + " ConnectionReset.");
-				}
-				else if (se.SocketErrorCode == SocketError.NotConnected)
-				{
-					// close when not connected
-					Console.WriteLine(ctx + " NotConnected.");
-				}
-				else
-				{
-					Console.WriteLine(ctx);
-					Console.WriteLine(e);
-				}
-			}
-			else if (e is ObjectDisposedException)
-			{
-				Console.WriteLine(ctx + " ObjectDisposedException.");
-			}
-			else
-			{
-				Console.WriteLine(ctx);
-				Console.WriteLine(e);
-			}
-		}
-
-		public static void LogNetTraffic(string msg)
-        {
-			msg = StreamWriterWithTimestamp.GetTimestamp() + msg;
-			StreamWriter sw = GetTrLogStream();
-			lock (sw){
-				sw.WriteLine(msg);
-			}
-        }
-
-        public static void LogNetTraffic(byte[] msgbin)
-        {
-            string msg = StreamWriterWithTimestamp.GetTimestamp() + Hex.EncodeHexStringTrimTrail(msgbin);
-			StreamWriter sw = GetTrLogStream();
-			lock (sw)
-			{
-				sw.WriteLine(msg);
-			}
-		}
-
-		static void Cleanup(object sender, System.EventArgs arg)
-        {
-            if(TrLogStream != null)
-                TrLogStream.Dispose();
-        }
+		//TODU: log for net traffic
     }
 
     // Simply extended System.IO.StreamWriter for adding timestamp workaround
@@ -203,7 +163,7 @@ namespace Shadowsocks.Controller
         {
         }
 
-        public static string GetTimestamp()
+        private string GetTimestamp()
         {
             return "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] ";
         }

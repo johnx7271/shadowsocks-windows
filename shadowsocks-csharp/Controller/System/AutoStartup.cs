@@ -1,26 +1,37 @@
 ﻿using System;
+using System.Reflection;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using Shadowsocks.Util;
 
 namespace Shadowsocks.Controller
 {
-    class AutoStartup
+    static class AutoStartup
     {
+        // Don't use Application.ExecutablePath
+        // see https://stackoverflow.com/questions/12945805/odd-c-sharp-path-issue
+        private static readonly string ExecutablePath = Assembly.GetEntryAssembly().Location;
+
+        private static string Key = "Shadowsocks_" + Application.StartupPath.GetHashCode();
+
         public static bool Set(bool enabled)
         {
+            RegistryKey runKey = null;
             try
             {
-                string path = Application.ExecutablePath;
-                RegistryKey runKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                runKey = Utils.OpenRegKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                if ( runKey == null ) {
+                    Logging.Error( @"Cannot find HKCU\Software\Microsoft\Windows\CurrentVersion\Run" );
+                    return false;
+                }
                 if (enabled)
                 {
-                    runKey.SetValue("Shadowsocks", path);
+                    runKey.SetValue(Key, ExecutablePath);
                 }
                 else
                 {
-                    runKey.DeleteValue("Shadowsocks");
+                    runKey.DeleteValue(Key);
                 }
-                runKey.Close();
                 return true;
             }
             catch (Exception e)
@@ -28,20 +39,44 @@ namespace Shadowsocks.Controller
                 Logging.LogUsefulException(e);
                 return false;
             }
+            finally
+            {
+                if (runKey != null)
+                {
+                    try {
+                        runKey.Close();
+                        runKey.Dispose();
+                    } catch (Exception e)
+                    { Logging.LogUsefulException(e); }
+                }
+            }
         }
 
         public static bool Check()
         {
+            RegistryKey runKey = null;
             try
             {
-                string path = Application.ExecutablePath;
-                RegistryKey runKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run");
+                runKey = Utils.OpenRegKey(@"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                if (runKey == null) {
+                    Logging.Error(@"Cannot find HKCU\Software\Microsoft\Windows\CurrentVersion\Run");
+                    return false;
+                }
                 string[] runList = runKey.GetValueNames();
-                runKey.Close();
                 foreach (string item in runList)
                 {
-                    if (item.Equals("Shadowsocks"))
+                    if (item.Equals(Key, StringComparison.OrdinalIgnoreCase))
                         return true;
+                    else if (item.Equals("Shadowsocks", StringComparison.OrdinalIgnoreCase)) // Compatibility with older versions
+                    {
+                        string value = Convert.ToString(runKey.GetValue(item));
+                        if (ExecutablePath.Equals(value, StringComparison.OrdinalIgnoreCase))
+                        {
+                            runKey.DeleteValue(item);
+                            runKey.SetValue(Key, ExecutablePath);
+                            return true;
+                        }
+                    }
                 }
                 return false;
             }
@@ -49,6 +84,17 @@ namespace Shadowsocks.Controller
             {
                 Logging.LogUsefulException(e);
                 return false;
+            }
+            finally
+            {
+                if (runKey != null)
+                {
+                    try {
+                        runKey.Close();
+                        runKey.Dispose();
+                    } catch (Exception e)
+                    { Logging.LogUsefulException(e); }
+                }
             }
         }
     }

@@ -1,37 +1,6 @@
-﻿Shadowsocks for Windows
+Shadowsocks for Windows
 =======================
-No-Privoxy Version
 
-This project is forked from ShadowSocks/ShadowSocks-Windows.
-The old version depends on Privoxy, although an open source project product 
-(hosted on SourceForge.net), but since nobody claimed to have checked its 
-source, so its  security clearness is un-guarantied, and this product, as a 
-highly security-sensitive middle man, I would like it be truly reliable, so I 
-removed the dependency on Privoxy.  A side-benefit of this removal is a 
-shorter path to the final browsing target. In the old version, the path is like this:  
-your browser ->local:1080 by shadowsocks.proxy -> local: 8033 by 
-Privoxy.translator -> local:1080 by shadowsocks.forwarder -> External Socks 
-server -> final target, so you can see its a really twisted path. In the No-Privoxy 
-version, the path is shortened.
-Another external dependency is libsscrypto, and I happily found it to be another 
-project on git, it's here: https://github.com/shadowsocks/libsscrypto . So I kept it.
-
-This version is tested on IE 8, 11, Firefox, Chrome, and sadly it only work for 
-Chrome. So if you use Chrome and care about security, then this one may be a 
-better alternative.
-
-Extra Usage Notes (besides the old  version):
-1. You'd better to use [Enable System Proxy], and set mode to [Pac].
-2. Added a feature to help debug, the setting is in gui-config.json,  logNetTraffic, if you 
-set it to true, then the network traffic will be logged, you can then see the net traffic 
-between the browser, shadowsocks, and extern socks server.
-3. Added a setting in gui-config.json, pacSockHeader, its values: Socks5, Socks, Socks4,  
-you should leave it as Socks5.
-
-John Xie @Beijing
-
-
-=======================
 [![Build Status]][Appveyor]
 
 [中文说明]
@@ -44,10 +13,15 @@ John Xie @Beijing
 4. Supports HTTP proxy
 5. Supports server auto switching
 6. Supports UDP relay (see Usage)
+7. Supports plugins
 
 #### Download
 
 Download the [latest release].
+
+#### Requirements
+
+Microsoft [.NET Framework 4.6.2] or higher. 
 
 #### Basic
 
@@ -63,7 +37,7 @@ port in `Servers -> Edit Servers`
 
 1. You can change PAC rules by editing the PAC file. When you save the PAC file
 with any editor, Shadowsocks will notify browsers about the change automatically
-2. You can also update PAC file from [GFWList] (maintained by 3rd party)
+2. You can also update PAC file from [GFWList] \(maintained by 3rd party)
 3. You can also use online PAC URL
 
 #### Server Auto Switching
@@ -85,30 +59,62 @@ If you want to manage multiple servers using other tools like SwitchyOmega,
 you can start multiple Shadowsocks instances. To avoid configuration conflicts,
 copy Shadowsocks to a new directory and choose a different local port.
 
-Also, make sure to use `SOCKS5` proxy in SwitchyOmega, since we have only
-one HTTP proxy instance.
+#### Plugins
+
+If you would like to connect to server via a plugin, please set the plugin's
+path (relative or absolute) on Edit Servers form.
+Note: Forward Proxy will not be used while a plugin is enabled.
+
+#### Global hotkeys
+
+Hotkeys are NOT registered automatically. You should re-register all hotkeys after
+restarting Shadowsocks. If you are using multiple instances of Shadowsocks,
+you must set different key combination for each instance.
+
+##### How to input?
+
+1. Put focus in the corresponding textbox.
+2. Press the key combination that you want to use.
+3. Release all keys when you think it is ready.
+4. Your input appears in the textbox.
+
+##### How to change?
+
+1. Put focus in the corresponding textbox.
+2. Press BackSpace key to clear content.
+3. Re-input new key combination.
+
+##### How to deactivate?
+
+1. Clear content in the textbox that you want to deactivate,
+if you want to deactivate all, please clear all textboxes.
+2. Press OK button to confirm.
+
+##### Meaning of label color
+
+- Green: This key combination is not occupied by other programs and register successfully.
+- Yellow: This key combination is occupied by other programs and you have to change to another one.
+- Transparent without color: The initial status.
 
 #### Server Configuration
 
 Please visit [Servers] for more information.
 
-#### Portable Mode
-
-If you want to put all temporary files into shadowsocks/temp folder instead of
-system temp folder, create a `shadowsocks_portable_mode.txt` into shadowsocks folder.
-
 #### Develop
 
-Visual Studio 2015 is required.
+[Visual Studio 2015] & [.NET Framework 4.6.2 Developer Pack] are required.
 
 #### License
 
 GPLv3
 
 
-[Appveyor]:       https://ci.appveyor.com/project/icylogic/shadowsocks-windows-l9mwe
-[Build Status]:   https://ci.appveyor.com/api/projects/status/ytllr9yjkbpc2tu2/branch/master
+[Appveyor]:       https://ci.appveyor.com/project/celeron533/shadowsocks-windows
+[Build Status]:   https://ci.appveyor.com/api/projects/status/tfw57q6eecippsl5/branch/master?svg=true
 [latest release]: https://github.com/shadowsocks/shadowsocks-csharp/releases
 [GFWList]:        https://github.com/gfwlist/gfwlist
 [Servers]:        https://github.com/shadowsocks/shadowsocks/wiki/Ports-and-Clients#linux--server-side
 [中文说明]:       https://github.com/shadowsocks/shadowsocks-windows/wiki/Shadowsocks-Windows-%E4%BD%BF%E7%94%A8%E8%AF%B4%E6%98%8E
+[.NET Framework 4.6.2]: https://www.microsoft.com/en-US/download/details.aspx?id=53344
+[Visual Studio 2015]: https://www.visualstudio.com/downloads/
+[.NET Framework 4.6.2 Developer Pack]: https://www.microsoft.com/download/details.aspx?id=53321
