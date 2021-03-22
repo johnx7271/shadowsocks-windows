@@ -37,6 +37,7 @@ namespace Shadowsocks.Model
         public override bool Equals(object obj)
         {
             Server o2 = (Server)obj;
+            if (o2 == null) return false;
             return server == o2.server && server_port == o2.server_port;
         }
 

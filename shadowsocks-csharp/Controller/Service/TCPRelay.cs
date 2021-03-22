@@ -92,7 +92,7 @@ namespace Shadowsocks.Controller
         public void UpdateLatency(Server server, TimeSpan latency)
         {
             _controller.UpdateLatency(server, latency);
-        }
+        }       
     }
 
     internal class TCPHandler
@@ -660,12 +660,13 @@ namespace Shadowsocks.Controller
             {
                 return;
             }
+            Server server = null;
             try
             {
                 var session = (AsyncSession<ProxyTimer>)ar.AsyncState;
                 ProxyTimer timer = session.State;
                 var destEndPoint = timer.DestEndPoint;
-                var server = timer.Server;
+                server = timer.Server;
                 timer.Elapsed -= ProxyConnectTimer_Elapsed;
                 timer.Enabled = false;
                 timer.Dispose();
@@ -696,6 +697,7 @@ namespace Shadowsocks.Controller
                 // Connect to the remote endpoint.
                 remote.BeginConnectDest(destEndPoint, ConnectCallback,
                     new AsyncSession<ServerTimer>(session, connectTimer));
+                return;
             }
             catch (ArgumentException)
             {
@@ -705,6 +707,7 @@ namespace Shadowsocks.Controller
                 Logging.LogUsefulException(e);
                 Close();
             }
+            ReportFailure(server);            
         }
 
         private void DestConnectTimer_Elapsed(object sender, ElapsedEventArgs e)
@@ -720,9 +723,8 @@ namespace Shadowsocks.Controller
             }
 
             var session = timer.Session;
-            Server server = timer.Server;
-            IStrategy strategy = _controller.GetCurrentStrategy();
-            strategy?.SetFailure(server);
+            Server server = timer.Server;            
+            ReportFailure(server);
             Logging.Info($"{server.FriendlyName()} timed out");
             session.Remote.Close();
             Close();
@@ -751,7 +753,7 @@ namespace Shadowsocks.Controller
                     Logging.Info($"Socket connected to ss server: {_server.FriendlyName()}");
                 }
 
-                var latency = DateTime.Now - _startConnectTime;
+                var latency = DateTime.Now - _startConnectTime;                
                 IStrategy strategy = _controller.GetCurrentStrategy();
                 strategy?.UpdateLatency(_server, latency);
                 _tcprelay.UpdateLatency(_server, latency);
@@ -762,12 +764,8 @@ namespace Shadowsocks.Controller
             {
             }
             catch (Exception e)
-            {
-                if (_server != null)
-                {
-                    IStrategy strategy = _controller.GetCurrentStrategy();
-                    strategy?.SetFailure(_server);
-                }
+            {                
+                ReportFailure(_server);
                 Logging.LogUsefulException(e);
                 Close();
             }
@@ -802,6 +800,7 @@ namespace Shadowsocks.Controller
             {
                 Logging.LogUsefulException(e);
                 Close();
+                ReportFailure(_server);
             }
         }
 
@@ -828,6 +827,7 @@ namespace Shadowsocks.Controller
                         {
                             Logging.Error("decryption error");
                             Close();
+                            ReportFailure(_server);
                             return;
                         }
                     }
@@ -856,6 +856,7 @@ namespace Shadowsocks.Controller
             {
                 Logging.LogUsefulException(e);
                 Close();
+                ReportFailure(_server);
             }
         }
 
@@ -901,6 +902,7 @@ namespace Shadowsocks.Controller
                 {
                     Logging.Debug("encryption error");
                     Close();
+                    ReportFailure(_server);
                     return;
                 }
             }
@@ -937,6 +939,7 @@ namespace Shadowsocks.Controller
             {
                 Logging.LogUsefulException(e);
                 Close();
+                ReportFailure(_server);
             }
         }
 
@@ -965,6 +968,16 @@ namespace Shadowsocks.Controller
             {
                 Logging.LogUsefulException(e);
                 Close();
+                ReportFailure(_server);
+            }
+        }
+        public void ReportFailure(Server server)
+        {
+            if (server != null)
+            {
+                IStrategy strategy = _controller.GetCurrentStrategy();
+                strategy?.SetFailure(server);
+                _controller.UpdateFail(server);
             }
         }
     }

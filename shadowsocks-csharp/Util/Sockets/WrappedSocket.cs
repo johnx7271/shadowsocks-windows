@@ -100,6 +100,7 @@ namespace Shadowsocks.Util.Sockets
                         if (Connected)
                         {
                             args.ConnectSocket.FullClose();
+                            // TODO: BeginConnect called twice, what then?   
                         }
                         else
                         {

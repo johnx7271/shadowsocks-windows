@@ -53,14 +53,16 @@ namespace Shadowsocks.Controller.Strategy
         public void ReloadServers()
         {
             // make a copy to avoid locking
-            var newServerStatus = new Dictionary<Server, ServerStatus>(_serverStatus);
+            var newServerStatus = new Dictionary<Server, ServerStatus>();
+            // a shallow copy
 
             foreach (var server in _controller.GetCurrentConfiguration().configs)
             {
-                if (!newServerStatus.ContainsKey(server))
-                {
-                    var status = new ServerStatus();
-                    status.server = server;
+                var status = new ServerStatus();
+                status.server = server;
+
+                if (!_serverStatus.ContainsKey(server))
+                {                                        
                     status.lastFailure = DateTime.MinValue;
                     status.lastRead = DateTime.Now;
                     status.lastWrite = DateTime.Now;
@@ -69,11 +71,13 @@ namespace Shadowsocks.Controller.Strategy
                     newServerStatus[server] = status;
                 }
                 else
-                {
-                    // update settings for existing server
-                    newServerStatus[server].server = server;
+                {                    
+                    // use existing status
+                    newServerStatus[server] = _serverStatus[server];
                 }
             }
+            // what about removed server?
+
             _serverStatus = newServerStatus;
 
             ChooseNewServer();
@@ -92,26 +96,18 @@ namespace Shadowsocks.Controller.Strategy
             return _currentServer.server;
         }
 
-        /**
-         * once failed, try after 5 min
-         * and (last write - last read) < 5s
-         * and (now - last read) <  5s  // means not stuck
-         * and latency < 200ms, try after 30s
-         */
         public void ChooseNewServer()
-        {
-            ServerStatus oldServer = _currentServer;
-            List<ServerStatus> servers = new List<ServerStatus>(_serverStatus.Values);
+        {            
+            List<ServerStatus> servers = new List<ServerStatus>(_serverStatus.Values); // shallow copy
             DateTime now = DateTime.Now;
             foreach (var status in servers)
             {
-                // all of failure, latency, (lastread - lastwrite) normalized to 1000, then
-                // 100 * failure - 2 * latency - 0.5 * (lastread - lastwrite)
-                status.score =
-                    100 * 1000 * Math.Min(5 * 60, (now - status.lastFailure).TotalSeconds)
-                    -2 * 5 * (Math.Min(2000, status.latency.TotalMilliseconds) / (1 + (now - status.lastTimeDetectLatency).TotalSeconds / 30 / 10) +
-                    -0.5 * 200 * Math.Min(5, (status.lastRead - status.lastWrite).TotalSeconds));
-                Logging.Debug(String.Format("server: {0} latency:{1} score: {2}", status.server.FriendlyName(), status.latency, status.score));
+                // all of failure, latency, (lastread - lastwrite) normalized to ms, then
+                // 100 * failure - 10 * latency - 1 * (lastread - lastwrite)
+                status.score = 100 * 1000 * Math.Min(60, (now - status.lastFailure).TotalSeconds)
+                    - 10 * status.latency.TotalMilliseconds / (1 + (now - status.lastTimeDetectLatency).TotalSeconds / 300)
+                    - 1000 * Math.Min(0.1, (status.lastRead - status.lastWrite).TotalSeconds); // (lastread-lastwrite) is also a meassure of server latency                                
+                //Logging.Debug(String.Format("server: {0} latency:{1} score: {2}", status.server.FriendlyName(), status.latency, status.score));
             }
             ServerStatus max = null;
             foreach (var status in servers)
@@ -135,7 +131,11 @@ namespace Shadowsocks.Controller.Strategy
                     _currentServer = max;
                     Logging.Info($"HA switching to server: {_currentServer.server.FriendlyName()}");
                 }
+                else 
+                    Logging.Info("HA server not switched.");
             }
+            else
+                Logging.Info("HA server not switched.");
         }
 
         public void UpdateLatency(Model.Server server, TimeSpan latency)

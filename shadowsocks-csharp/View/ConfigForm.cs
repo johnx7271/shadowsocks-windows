@@ -73,6 +73,9 @@ namespace Shadowsocks.View
             IPTextBox.Focus();
         }
 
+        /// <summary>
+        /// save data in the edit boxes back to _modifiedConfiguration
+        /// </summary>        
         private bool SaveOldSelectedServer()
         {
             try
@@ -172,8 +175,7 @@ namespace Shadowsocks.View
             // Sometimes the users may hit enter key by mistake, and the form will close without saving entries.
 
             if (e.KeyCode == Keys.Enter)
-            {
-                Server server = controller.GetCurrentServer();
+            {                
                 if (!SaveOldSelectedServer())
                 {
                     return;
@@ -183,8 +185,11 @@ namespace Shadowsocks.View
                     MessageBox.Show(I18N.GetString("Please add at least one server"));
                     return;
                 }
+                //_modifiedConfiguration
                 controller.SaveServers(_modifiedConfiguration.configs, _modifiedConfiguration.localPort);
-                controller.SelectServerIndex(_modifiedConfiguration.configs.IndexOf(server));
+
+                if(_lastSelectedIndex >= 0)
+                    controller.SelectServerIndex(_lastSelectedIndex);
             }
 
         }
@@ -201,8 +206,7 @@ namespace Shadowsocks.View
                 return;
             }
             if (!SaveOldSelectedServer())
-            {
-                // why this won't cause stack overflow?
+            {                
                 ServersListBox.SelectedIndex = _lastSelectedIndex;
                 return;
             }
@@ -254,7 +258,7 @@ namespace Shadowsocks.View
                 // can be -1
                 _lastSelectedIndex = _modifiedConfiguration.configs.Count - 1;
             }
-            ServersListBox.SelectedIndex = _lastSelectedIndex;
+            
             LoadConfiguration();
             ServersListBox.SelectedIndex = _lastSelectedIndex;
             LoadSelectedServer();
@@ -272,9 +276,7 @@ namespace Shadowsocks.View
                 return;
             }
             controller.SaveServers(_modifiedConfiguration.configs, _modifiedConfiguration.localPort);
-            // SelectedIndex remains valid
-            // We handled this in event handlers, e.g. Add/DeleteButton, SelectedIndexChanged
-            // and move operations
+            
             controller.SelectServerIndex(ServersListBox.SelectedIndex);
             this.Close();
         }

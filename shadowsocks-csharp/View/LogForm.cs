@@ -98,14 +98,19 @@ namespace Shadowsocks.View
 
             if (trafficChart.IsHandleCreated)
             {
-                trafficChart.Series["Inbound"].Points.DataBindY(inboundPoints);
-                trafficChart.Series["Outbound"].Points.DataBindY(outboundPoints);
+                Series s1, s2;
+                s1 = trafficChart.Series["Inbound"];
+                s2 = trafficChart.Series["Outbound"];
+                s1.Points.DataBindY(inboundPoints);
+                s2.Points.DataBindY(outboundPoints);
                 trafficChart.ChartAreas[0].AxisY.LabelStyle.Format = "{0:0.##} " + bandwidthScale.unitName;
                 trafficChart.ChartAreas[0].AxisY.Maximum = bandwidthScale.value;
-                inboundAnnotation.AnchorDataPoint = trafficChart.Series["Inbound"].Points.Last();
+                inboundAnnotation.AnchorDataPoint = s1.Points.Last();
                 inboundAnnotation.Text = Utils.FormatBandwidth(lastInbound);
-                outboundAnnotation.AnchorDataPoint = trafficChart.Series["Outbound"].Points.Last();
+                inboundAnnotation.ForeColor = s1.Color;
+                outboundAnnotation.AnchorDataPoint = s2.Points.Last();
                 outboundAnnotation.Text = Utils.FormatBandwidth(lastOutbound);
+                outboundAnnotation.ForeColor = s2.Color;
                 trafficChart.Annotations.Clear();
                 trafficChart.Annotations.Add(inboundAnnotation);
                 trafficChart.Annotations.Add(outboundAnnotation);

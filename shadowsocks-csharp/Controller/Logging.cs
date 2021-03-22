@@ -165,7 +165,7 @@ namespace Shadowsocks.Controller
 
         private string GetTimestamp()
         {
-            return "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] ";
+            return "[" + DateTime.Now.ToString("MM-dd HH:mm:ss") + "] ";
         }
 
         public override void WriteLine(string value)

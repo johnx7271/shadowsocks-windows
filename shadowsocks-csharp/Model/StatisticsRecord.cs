@@ -18,6 +18,9 @@ namespace Shadowsocks.Model
 
         private bool EmptyLatencyData => (AverageLatency == null) && (MinLatency == null) && (MaxLatency == null);
 
+        /// <summary>
+        /// note the speed is in KB/s here. While the overall traffic speed data from controller is in B/s
+        /// </summary>
         public int? AverageInboundSpeed;
         public int? MinInboundSpeed;
         public int? MaxInboundSpeed;
@@ -32,17 +35,25 @@ namespace Shadowsocks.Model
         private bool EmptyOutboundSpeedData
             => (AverageOutboundSpeed == null) && (MinOutboundSpeed == null) && (MaxOutboundSpeed == null);
 
-        // if user disabled ping test, response would be null
+        /// <summary>
+        /// ping response time in ms.
+        /// if user disabled ping test, response would be null
+        /// </summary>
         public int? AverageResponse;
         public int? MinResponse;
         public int? MaxResponse;
-        public float? PackageLoss;
+        
+        /// <summary>
+        /// actually is the ratio of packets that succeeded.
+        /// </summary>
+        public float? PacketLoss;
 
         private bool EmptyResponseData
-            => (AverageResponse == null) && (MinResponse == null) && (MaxResponse == null) && (PackageLoss == null);
+            => (AverageResponse == null) && (MinResponse == null) && (MaxResponse == null) && (PacketLoss == null);
 
         public bool IsEmptyData() {
-            return EmptyInboundSpeedData && EmptyOutboundSpeedData && EmptyResponseData && EmptyLatencyData;
+            return EmptyInboundSpeedData && EmptyOutboundSpeedData && EmptyResponseData && EmptyLatencyData
+                && (FailCount == null);
         }
 
         public StatisticsRecord()
@@ -89,7 +100,13 @@ namespace Shadowsocks.Model
             AverageResponse = (int?) records.Average();
             MinResponse = records.Min();
             MaxResponse = records.Max();
-            PackageLoss = responseRecords.Count(response => response != null)/(float) responseRecords.Count;
+            PacketLoss = records.Count / (float) responseRecords.Count;
         }
+
+        /// <summary>
+        /// number of failure per second.
+        /// this data is not a reliable indicator, since some server may not be fully used.
+        /// </summary>
+        public float? FailCount;
     }
 }

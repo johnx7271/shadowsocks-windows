@@ -13,11 +13,38 @@ namespace Shadowsocks.Model
     public class StatisticsStrategyConfiguration
     {
         public static readonly string ID = "com.shadowsocks.strategy.statistics";
+
+        /// <summary>
+        /// if set, will collect statistics data
+        /// to use statisticsstrategy, must set this.
+        /// </summary>
         public bool StatisticsEnabled { get; set; } = false;
+
+        /// <summary>
+        /// if statistics is only valid within an hour.
+        /// </summary>
         public bool ByHourOfDay { get; set; } = true;
+
+        /// <summary>
+        /// if make ping test for servers        
+        /// </summary>
         public bool Ping { get; set; }
+
+        /// <summary>        
+        /// Not really useful.
+        /// </summary>
         public int ChoiceKeptMinutes { get; set; } = 10;
+
+        /// <summary> 
+        /// during this interval, a StatisticsRecord is regenerated for each server.
+        /// also the interval used to ping servers
+        /// if there are many servers, then use a larger number
+        /// </summary>
         public int DataCollectionMinutes { get; set; } = 10;
+
+        /// <summary>
+        /// server ping test repeat times during a DataCollectionMinutes
+        /// </summary>
         public int RepeatTimesNum { get; set; } = 4;
 
         private const string ConfigFile = "statistics-config.json";

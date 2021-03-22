@@ -141,6 +141,7 @@ namespace SimpleJson
                 throw new ArgumentOutOfRangeException("index");
 
             int i = 0;
+            lock(obj)
             foreach (KeyValuePair<string, object> o in obj)
                 if (i++ == index) return o.Value;
 
@@ -1172,6 +1173,7 @@ namespace SimpleJson
             builder.Append("[\r\n  ");
 
             bool first = true;
+            lock(anArray)
             foreach (object value in anArray)
             {
                 if (!first)
@@ -1331,6 +1333,9 @@ namespace SimpleJson
     {
         bool SerializeNonPrimitiveObject(object input, out object output);
 
+        /// <summary>
+        /// retrieve all propertyinfo and fieldinfo from type, add a MemberMap for each one.
+        /// </summary>
 		void BuildMap(Type type, SafeDictionary<string, CacheResolver.MemberMap> memberMaps);
 
 		/// <summary>
@@ -1640,16 +1645,16 @@ namespace SimpleJson
 #endif
  class ReflectionUtils
         {
-            public static Attribute GetAttribute(MemberInfo info, Type type)
+            public static Attribute GetAttribute(MemberInfo info, Type attributeType)
             {
 #if NETFX_CORE
-                if (info == null || type == null || !info.IsDefined(type))
+                if (info == null || attributeType == null || !info.IsDefined(attributeType))
                     return null;
-                return info.GetCustomAttribute(type);
+                return info.GetCustomAttribute(attributeType);
 #else
-                if (info == null || type == null || !Attribute.IsDefined(info, type))
+                if (info == null || attributeType == null || !Attribute.IsDefined(info, attributeType))
                     return null;
-                return Attribute.GetCustomAttribute(info, type);
+                return Attribute.GetCustomAttribute(info, attributeType);
 #endif
             }
 
@@ -1711,9 +1716,12 @@ namespace SimpleJson
 					&& type.GetGenericTypeDefinition() == typeof(Nullable<>);
             }
 
-            public static object ToNullableType(object obj, Type nullableType)
+            /// <summary>
+            /// convert obj to nullableBaseType
+            /// </summary>            
+            public static object ToNullableType(object obj, Type nullableBaseType)
             {
-                return obj == null ? null : Convert.ChangeType(obj, Nullable.GetUnderlyingType(nullableType), CultureInfo.InvariantCulture);
+                return obj == null ? null : Convert.ChangeType(obj, Nullable.GetUnderlyingType(nullableBaseType), CultureInfo.InvariantCulture);
             }
         }
 
@@ -1739,7 +1747,9 @@ namespace SimpleJson
  delegate void MemberMapLoader(Type type, SafeDictionary<string, CacheResolver.MemberMap> memberMaps);
 
 
-
+        /// <summary>
+        /// cache for JsonTypeConverter
+        /// </summary>
 #if SIMPLE_JSON_INTERNAL
 		internal
 #else
@@ -1753,12 +1763,18 @@ namespace SimpleJson
             private readonly SafeDictionary<Type, 
 				JsonTypeConverter> _ConverterCache = new SafeDictionary<Type, JsonTypeConverter>();
 
+            /// <summary>
+            /// memberMapLoader not used.            
+            /// </summary>
 			public CacheResolver(MemberMapLoader memberMapLoader, IJsonSerializerStrategy parent)
             {
 				_parentStg = parent;
 				//_memberMapLoader = memberMapLoader;
-            }		
+            }
 
+            /// <summary>
+            /// return the JsonTypeConverter for type
+            /// </summary>
             internal JsonTypeConverter LoadTypeConverter(Type type)
             {                
                 JsonTypeConverter converter;

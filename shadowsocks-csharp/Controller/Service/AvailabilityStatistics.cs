@@ -31,12 +31,14 @@ namespace Shadowsocks.Controller
         private int Repeat => Config.RepeatTimesNum;
         public const int TimeoutMilliseconds = 500;
 
-        //records cache for current server in {_monitorInterval} minutes
-        private readonly ConcurrentDictionary<string, List<int>> _latencyRecords = new ConcurrentDictionary<string, List<int>>();
+        // data for inner circle 
+        //records cache for current server in {_monitorInterval} period
+        private readonly ConcurrentDictionary<string, List<int>> _latencyRecords = new ConcurrentDictionary<string, List<int>>();        
         //speed in KiB/s
         private readonly ConcurrentDictionary<string, List<int>> _inboundSpeedRecords = new ConcurrentDictionary<string, List<int>>();
         private readonly ConcurrentDictionary<string, List<int>> _outboundSpeedRecords = new ConcurrentDictionary<string, List<int>>();
         private readonly ConcurrentDictionary<string, InOutBoundRecord> _inOutBoundRecords = new ConcurrentDictionary<string, InOutBoundRecord>();
+        private readonly ConcurrentDictionary<string, int> _failCountRecords = new ConcurrentDictionary<string, int>();
 
         private class InOutBoundRecord
         {
@@ -68,22 +70,35 @@ namespace Shadowsocks.Controller
             }
         }
 
-        //tasks
+        // for the outer circle
         private readonly TimeSpan _delayBeforeStart = TimeSpan.FromSeconds(1);
         private readonly TimeSpan _retryInterval = TimeSpan.FromMinutes(2);
-        private Timer _recorder; //analyze and save cached records to RawStatistics and filter records
+        private Timer _recorder; // ping and aggregate raw speed data and save to RawStatistics and filter to FilteredStatistics
+
+        /// <summary>
+        /// outer circle interval for _recorder      
+        /// if there are many servers, then use a larger number
+        /// </summary>
         private TimeSpan RecordingInterval => TimeSpan.FromMinutes(Config.DataCollectionMinutes);
+
+        // the inner circle timer, for raw speed collecting. 
         private Timer _speedMonior;
+        /// <summary>
+        /// 1 seconde
+        /// </summary>
         private readonly TimeSpan _monitorInterval = TimeSpan.FromSeconds(1);
-        //private Timer _writer; //write RawStatistics to file
-        //private readonly TimeSpan _writingInterval = TimeSpan.FromMinutes(1);
 
         private ShadowsocksController _controller;
         private StatisticsStrategyConfiguration Config => _controller.StatisticsConfiguration;
 
-        // Static Singleton Initialization
+        
         public static AvailabilityStatistics Instance { get; } = new AvailabilityStatistics();
+
         public Statistics RawStatistics { get; private set; }
+
+        /// <summary>
+        /// from RawStatistics, with outdated record removed.
+        /// </summary>
         public Statistics FilteredStatistics { get; private set; }
 
         private AvailabilityStatistics()
@@ -91,6 +106,13 @@ namespace Shadowsocks.Controller
             RawStatistics = new Statistics();
         }
 
+        /// <summary>
+        /// start the timer to meassure and populate RawStatistics
+        /// RawStatistics is intially loaed.
+        /// during each run of the timer, RawStatistics is saved and filtered.
+        /// cached data for inner circle is reset.
+        /// </summary>
+        /// <param name="controller"></param>
         internal void UpdateConfiguration(ShadowsocksController controller)
         {
             _controller = controller;
@@ -100,7 +122,9 @@ namespace Shadowsocks.Controller
                 if (Config.StatisticsEnabled)
                 {
                     StartTimerWithoutState(ref _recorder, Run, RecordingInterval);
-                    LoadRawStatistics();
+                    LoadRawStatistics(); // why after the previous one?
+                                         // since Run is a delayed timer proc, so this will probably run b4 Run 
+
                     StartTimerWithoutState(ref _speedMonior, UpdateSpeed, _monitorInterval);
                 }
                 else
@@ -123,6 +147,13 @@ namespace Shadowsocks.Controller
             }
         }
 
+        /// <summary>
+        /// the timer proc for speed test.
+        /// this is the inner circle with shorter period.
+        /// for each server,  
+        /// use raw data from _inOutBoundRecords (see UpdateInboundCounter, UpdateOutboundCounter)
+        /// to append a new record for the server in _inboundSpeedRecords and _outboundSpeedRecords
+        /// </summary>        
         private void UpdateSpeed(object _)
         {
             foreach (var kv in _inOutBoundRecords)
@@ -155,32 +186,47 @@ namespace Shadowsocks.Controller
             _latencyRecords.Clear();
         }
 
+        /// <summary>
+        /// the timer proc for outer circle, also do ping test.
+        /// call low level UpdateRecords
+        /// and reset
+        /// </summary>
         private void Run(object _)
         {
             UpdateRecords();
             Reset();
         }
 
+        /// <summary>
+        /// the low level timer proc for aggregating raw speed data and also ping test.
+        /// for each server, 
+        /// inspeed, outspeed, latency data are aggregated to a StatisticsRecord for the server.
+        /// if (ping), use MyPing (async) to measure response and PacketLoss,         
+        /// when each ping completed, the record is updated to RawStatistics
+        /// when last ping is done, RawStatistics is Saved.
+        /// </summary>
         private void UpdateRecords()
         {
-            var records = new Dictionary<string, StatisticsRecord>();
             UpdateRecordsState state = new UpdateRecordsState();
             state.counter = _controller.GetCurrentConfiguration().configs.Count;
+            // state is shared among servers, holds the number of servers remains to be pinged.
+            int recordingInterval = (int)RecordingInterval.TotalSeconds;
+
             foreach (var server in _controller.GetCurrentConfiguration().configs)
             {
                 var id = server.Identifier();
+                int failedCount;
                 List<int> inboundSpeedRecords = null;
                 List<int> outboundSpeedRecords = null;
                 List<int> latencyRecords = null;
                 _inboundSpeedRecords.TryGetValue(id, out inboundSpeedRecords);
                 _outboundSpeedRecords.TryGetValue(id, out outboundSpeedRecords);
-                _latencyRecords.TryGetValue(id, out latencyRecords);
+                _latencyRecords.TryGetValue(id, out latencyRecords);                
                 StatisticsRecord record = new StatisticsRecord(id, inboundSpeedRecords, outboundSpeedRecords, latencyRecords);
-                /* duplicate server identifier */
-                if (records.ContainsKey(id))
-                    records[id] = record;
-                else
-                    records.Add(id, record);
+
+                if (_failCountRecords.TryGetValue(id, out failedCount)) 
+                    record.FailCount = (float)failedCount / recordingInterval;
+
                 if (Config.Ping)
                 {
                     MyPing ping = new MyPing(server, Repeat);
@@ -200,6 +246,10 @@ namespace Shadowsocks.Controller
             }
         }
 
+        /// <summary>
+        /// append the ping result to RawStatistics
+        /// if the last server to be pinged, save to file and filter out outdated record if Config.ByHourOfDay
+        /// </summary>
         private void ping_Completed(object sender, MyPing.CompletedEventArgs e)
         {
             PingState pingState = (PingState)e.UserState;
@@ -211,14 +261,18 @@ namespace Shadowsocks.Controller
             {
                 AppendRecord(server.Identifier(), record);
             }
-            Logging.Debug($"Ping {server.FriendlyName()} {e.RoundtripTime.Count} times, {(100 - record.PackageLoss * 100)}% packages loss, min {record.MinResponse} ms, max {record.MaxResponse} ms, avg {record.AverageResponse} ms");
-            if (Interlocked.Decrement(ref state.counter) == 0)
+            Logging.Debug($"Ping {server.FriendlyName()} {e.RoundtripTime.Count} roundtrip times, {(100 - record.PacketLoss * 100)}% packet loss, min {record.MinResponse} ms, max {record.MaxResponse} ms, avg {record.AverageResponse} ms");
+            if (Interlocked.Decrement(ref state.counter) == 0)  // last server pinged?
             {
                 Save();
                 FilterRawStatistics();
             }
         }
 
+        /// <summary>
+        /// append the record to the list of statisticsrecords at RawStatistics[server],
+        /// if the list is null, add a empty list before appending.
+        /// </summary>
         private void AppendRecord(string serverIdentifier, StatisticsRecord record)
         {
             try
@@ -240,6 +294,9 @@ namespace Shadowsocks.Controller
             }
         }
 
+        /// <summary>
+        /// serialize RawStatistics to AvailabilityStatisticsFile
+        /// </summary>
         private void Save()
         {
             Logging.Debug($"save statistics to {AvailabilityStatisticsFile}");
@@ -272,17 +329,48 @@ namespace Shadowsocks.Controller
             return true;
         }
 
+        /// <summary>
+        /// remove data older.
+        /// and Save
+        /// </summary>        
+        public void CleanseRawStatistics(int recentDays2Keep)
+        {
+            // remove statistics older than 7 day.
+            Dictionary<string, List<StatisticsRecord>> sta = RawStatistics;
+            Dictionary<string, List<StatisticsRecord>> newsta = new Dictionary<string, List<StatisticsRecord>>();
+            DateTime n = DateTime.Now;
+
+            lock (sta)
+                foreach (var kv in sta)
+                {
+                    List<StatisticsRecord> list = new List<StatisticsRecord>(kv.Value.Count);
+                    foreach (var rec in kv.Value)
+                    {
+                        if ((n - rec.Timestamp).TotalSeconds < recentDays2Keep * 86400)
+                            list.Add(rec);
+                    }
+                    newsta[kv.Key] = list;
+                }
+            RawStatistics = RawStatistics;
+            Save();
+        }
+
+        /// <summary>
+        /// remove records that are outdated.
+        /// in statistic config, if ByHourOfDay and record's timestamp hour is not current hour, then removed.
+        /// </summary>
         private void FilterRawStatistics()
         {
             try
             {
                 Logging.Debug("filter raw statistics");
-                if (RawStatistics == null) return;
+                
                 if (FilteredStatistics == null)
                 {
                     FilteredStatistics = new Statistics();
                 }
 
+                lock(RawStatistics)
                 foreach (var serverAndRecords in RawStatistics)
                 {
                     var server = serverAndRecords.Key;
@@ -296,6 +384,9 @@ namespace Shadowsocks.Controller
             }
         }
 
+        /// <summary>
+        /// deserialize RawStatistics from AvailabilityStatisticsFile
+        /// </summary>
         private void LoadRawStatistics()
         {
             try
@@ -310,7 +401,23 @@ namespace Shadowsocks.Controller
                     }
                 }
                 var content = File.ReadAllText(path);
-                RawStatistics = SimpleJson.SimpleJson.DeserializeObject<Statistics>(content) ?? RawStatistics;
+                Statistics tmp1 = SimpleJson.SimpleJson.DeserializeObject<Statistics>(content) ?? RawStatistics;                
+                List<Server> servers = _controller.GetCurrentConfiguration().configs;
+                Statistics tmp2 = new Statistics(servers.Count);
+
+                // remove unused servers
+                foreach (Server server in servers)
+                {
+                    string serverid = server.Identifier();
+                    List<StatisticsRecord> t = tmp1.ContainsKey(serverid) ?
+                        tmp1[serverid] : null;
+                    if (t != null)
+                        if (!tmp2.ContainsKey(serverid))
+                            tmp2.Add(serverid, t);
+                        //else
+                        //    tmp2[serverid] = t;
+                }
+                RawStatistics = tmp2;
             }
             catch (Exception e)
             {
@@ -332,16 +439,26 @@ namespace Shadowsocks.Controller
             _speedMonior.Dispose();
         }
 
+        /// <summary>
+        /// Append latency to _latencyRecords for server in _latencyRecords
+        /// </summary>        
         public void UpdateLatency(Server server, int latency)
-        {
-            _latencyRecords.GetOrAdd(server.Identifier(), (k) =>
+        {            
+            _latencyRecords.AddOrUpdate(server.Identifier(), (k) =>            
             {
                 List<int> records = new List<int>();
                 records.Add(latency);
                 return records;
+            }, (k, v) =>
+            {
+                v.Add(latency);
+                return v;
             });
         }
 
+        /// <summary>
+        /// AddOrUpdate the Inbound of the InOutBoundRecord for server in _inOutBoundRecords
+        /// </summary>        
         public void UpdateInboundCounter(Server server, long n)
         {
             _inOutBoundRecords.AddOrUpdate(server.Identifier(), (k) =>
@@ -357,6 +474,9 @@ namespace Shadowsocks.Controller
             });
         }
 
+        /// <summary>
+        /// AddOrUpdate the Outbound of the InOutBoundRecord for server in _inOutBoundRecords
+        /// </summary>
         public void UpdateOutboundCounter(Server server, long n)
         {
             _inOutBoundRecords.AddOrUpdate(server.Identifier(), (k) =>
@@ -372,8 +492,22 @@ namespace Shadowsocks.Controller
             });
         }
 
+        public void UpdateFail(Server server)
+        {
+            _failCountRecords.AddOrUpdate(server.Identifier(), (k) =>
+            {
+                return 1;
+            }, (k, v) =>
+            {                
+                return v + 1;
+            });
+        }
+
         class UpdateRecordsState
         {
+            /// <summary>
+            /// initialised to the number of servers in the configs
+            /// </summary>
             public int counter;
         }
 
@@ -383,6 +517,10 @@ namespace Shadowsocks.Controller
             public StatisticsRecord record;
         }
 
+        /// <summary>
+        /// used to measure the round trip time, 
+        /// start an async task to do ping test, repeat this task (repeat) times,
+        /// </summary>
         class MyPing
         {
             //arguments for ICMP tests

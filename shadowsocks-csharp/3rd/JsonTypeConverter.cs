@@ -12,6 +12,9 @@ namespace SimpleJson.Reflection
 
 	internal delegate object CtorObjDelegate(params object[] args);
 		
+    /// <summary>
+    /// convert obj to or from JsonObject
+    /// </summary>
 	internal class JsonTypeConverter
 	{
 		// Fields
@@ -133,6 +136,9 @@ namespace SimpleJson.Reflection
 			return c;
 		}
 
+        /// <summary>
+        /// return the default ctor for type
+        /// </summary>        
 		public static CtorDelegate GetCtor(Type type)
 		{
 			ConstructorInfo constructorInfo = type.GetConstructor(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);

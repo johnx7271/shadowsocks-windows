@@ -9,6 +9,10 @@ using Shadowsocks.Model;
 
 namespace Shadowsocks.View
 {
+    /// <summary>
+    /// note, inbound speed is the most important.
+    /// the coefficient of laterncy should be negative    
+    /// </summary>
     public partial class StatisticsStrategyConfigurationForm : Form
     {
         private readonly ShadowsocksController _controller;
@@ -16,21 +20,27 @@ namespace Shadowsocks.View
         private readonly DataTable _dataTable = new DataTable();
         private List<string> _servers;
         private readonly Series _speedSeries;
-        private readonly Series _packageLossSeries;
+        private readonly Series _failRateSeries;
         private readonly Series _pingSeries;
+        private double _y2Max;
+        private double _failRateMax;
 
         public StatisticsStrategyConfigurationForm(ShadowsocksController controller)
         {
             if (controller == null) return;
             InitializeComponent();
             _speedSeries = StatisticsChart.Series["Speed"];
-            _packageLossSeries = StatisticsChart.Series["Package Loss"];
+            _failRateSeries = StatisticsChart.Series["FailRate"];
             _pingSeries = StatisticsChart.Series["Ping"];
             _controller = controller;
-            _controller.ConfigChanged += (sender, args) => LoadConfiguration();
+            _controller.ConfigChanged += controller_ConfigChanged;
             LoadConfiguration();
             Load += (sender, args) => InitData();
+        }
 
+        private void controller_ConfigChanged(Object sender, EventArgs args)
+        {
+            LoadConfiguration();
         }
 
         private void LoadConfiguration()
@@ -56,23 +66,18 @@ namespace Shadowsocks.View
 
             serverSelector.DataSource = _servers;
 
-            _dataTable.Columns.Add("Timestamp", typeof(DateTime));
+            _dataTable.Columns.Add("Key", typeof(Int32));
             _dataTable.Columns.Add("Speed", typeof (int));
-            _speedSeries.XValueMember = "Timestamp";
-            _speedSeries.YValueMembers = "Speed";
-
-            // might be empty
-            _dataTable.Columns.Add("Package Loss", typeof (int));
-            _dataTable.Columns.Add("Ping", typeof (int));
-            _packageLossSeries.XValueMember = "Timestamp";
-            _packageLossSeries.YValueMembers = "Package Loss";
-            _pingSeries.XValueMember = "Timestamp";
-            _pingSeries.YValueMembers = "Ping";
+            _dataTable.Columns.Add("Ping", typeof(int[]));
+            _dataTable.Columns.Add("FailRate", typeof(float));
 
             StatisticsChart.DataSource = _dataTable;
             LoadChartData();
-            StatisticsChart.DataBind();
+            BindPingData();
+            StatisticsChart.DataBind();            
         }
+
+        
 
         private void CancelButton_Click(object sender, EventArgs e)
         {
@@ -96,62 +101,121 @@ namespace Shadowsocks.View
             _dataTable.Rows.Clear();
 
             //return directly when no data is usable
-            if (_controller.availabilityStatistics?.FilteredStatistics == null) return;
+            Dictionary<string, List<StatisticsRecord>> sta = _controller.availabilityStatistics?.RawStatistics;
+            if ( sta == null) return;
             List<StatisticsRecord> statistics;
-            if (!_controller.availabilityStatistics.FilteredStatistics.TryGetValue(serverName, out statistics)) return;
+            if (!sta.TryGetValue(serverName, out statistics)) return;
+
+            ChartArea ca = this.StatisticsChart.ChartAreas[0];
             IEnumerable<IGrouping<int, StatisticsRecord>> dataGroups;
+            DateTime n = DateTime.Now;
             if (allMode.Checked)
             {
-                _pingSeries.XValueType = ChartValueType.DateTime;
-                _packageLossSeries.XValueType = ChartValueType.DateTime;
-                _speedSeries.XValueType = ChartValueType.DateTime;
-                dataGroups = statistics.GroupBy(data => data.Timestamp.DayOfYear);
-                StatisticsChart.ChartAreas["DataArea"].AxisX.LabelStyle.Format = "g";
-                StatisticsChart.ChartAreas["DataArea"].AxisX2.LabelStyle.Format = "g";
+                int nd = n.DayOfYear;
+                dataGroups = statistics.GroupBy(data => nd - data.Timestamp.DayOfYear);
+                ca.AxisX.Title = $"Days from today";                
             }
             else
-            {
-                _pingSeries.XValueType = ChartValueType.Time;
-                _packageLossSeries.XValueType = ChartValueType.Time;
-                _speedSeries.XValueType = ChartValueType.Time;
-                dataGroups = statistics.GroupBy(data => data.Timestamp.Hour);
-                StatisticsChart.ChartAreas["DataArea"].AxisX.LabelStyle.Format = "HH:00";
-                StatisticsChart.ChartAreas["DataArea"].AxisX2.LabelStyle.Format = "HH:00";
+            {                
+                dataGroups = from data in statistics
+                             let twentymin = (int) ((n - data.Timestamp).TotalSeconds / 1200)
+                             where twentymin <= 24 * 3
+                             group data by twentymin;
+                ca.AxisX.Title = $"Time from now in units of 20 min";
             }
+
             var finalData = from dataGroup in dataGroups
-                            orderby dataGroup.Key
+                            orderby dataGroup.Key descending
                             select new
                             {
-                                dataGroup.First().Timestamp,
-                                Speed = dataGroup.Max(data => data.MaxInboundSpeed) ?? 0,
-                                Ping = (int) (dataGroup.Average(data => data.AverageResponse) ?? 0),
-                                PackageLossPercentage = (int) (dataGroup.Average(data => data.PackageLoss) ?? 0) * 100
+                                dataGroup.Key,
+                                Speed = dataGroup.Average(data => data.AverageInboundSpeed) ?? 0,
+                                Ping = new int[2]{(int)(dataGroup.Average(data => data.AverageResponse) ?? 0),
+                                    100 - (int)(dataGroup.Average(data => data.PacketLoss) ?? 1) * 100 },
+                                FailRate = dataGroup.Average(data => data.FailCount) ?? -0.001
                             };
-            foreach (var data in finalData.Where(data => data.Speed != 0 || data.PackageLossPercentage != 0 || data.Ping != 0))
+
+            int pingmax = 0;
+            double rateMax = 0;
+            foreach (var data in finalData.Where(data => data.Speed != 0 || data.Ping[0] != 0 || data.FailRate != -0.001))
             {
-                _dataTable.Rows.Add(data.Timestamp, data.Speed, data.PackageLossPercentage, data.Ping);
+                if (data.Ping[0] > pingmax)
+                    pingmax = data.Ping[0];
+                if (data.FailRate > rateMax)
+                    rateMax = data.FailRate;
+                _dataTable.Rows.Add(data.Key, data.Speed, data.Ping, data.FailRate);                
             }
-            StatisticsChart.DataBind();
+            _y2Max = Round(pingmax);
+            _failRateMax = Round(rateMax < 0 ? 1 : rateMax);
+        }
+
+        private void BindPingData()
+        {
+            ChartArea ca = this.StatisticsChart.ChartAreas[0];
+            Axis y2 = ca.AxisY2;
+            y2.Maximum = _y2Max;
+            double rate = _y2Max / _failRateMax;
+
+            _pingSeries.Points.Clear();
+            foreach (DataRow row in _dataTable.Rows)
+            {
+                object[] r = row.ItemArray;
+                int[] ping = (int[])(r[2]);
+                _pingSeries.Points.AddXY(r[0], ping[0], ping[1]);
+                r[3] = (float)(r[3]) * rate;
+                row.ItemArray = r;
+            }
+            y2.Title = $"Ping in ms\nFailRate * {(int)rate}";
+        }
+
+        static public double Round(double f)
+        {
+            int scale = 1;             
+            while (scale < f)
+                scale *= 10;
+
+            if (scale == 1)
+                return 1;
+            else {
+                scale /= 10;
+                return Math.Ceiling(f / scale) * scale;
+            }
         }
 
         private void serverSelector_SelectionChangeCommitted(object sender, EventArgs e)
         {
             LoadChartData();
+            BindPingData();
+            StatisticsChart.DataBind();            
         }
 
         private void dayMode_CheckedChanged(object sender, EventArgs e)
         {
             LoadChartData();
+            BindPingData();
+            StatisticsChart.DataBind();
         }
 
         private void allMode_CheckedChanged(object sender, EventArgs e)
         {
             LoadChartData();
+            BindPingData();
+            StatisticsChart.DataBind();            
         }
 
         private void PingCheckBox_CheckedChanged(object sender, EventArgs e)
         {
             repeatTimesNum.ReadOnly = !PingCheckBox.Checked;
+        }
+
+        private void StatisticsStrategyConfigurationForm_FormClosed(object sender, FormClosedEventArgs e)
+        {            
+            _controller.ConfigChanged -= controller_ConfigChanged;            
+        }
+
+        private void CleanButton_Click(object sender, EventArgs e)
+        {
+            _controller.availabilityStatistics?.CleanseRawStatistics(7);
         }
     }
 }

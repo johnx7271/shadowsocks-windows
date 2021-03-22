@@ -44,6 +44,7 @@ namespace Shadowsocks.Controller
         private long _outboundCounter = 0;
         public long InboundCounter => Interlocked.Read(ref _inboundCounter);
         public long OutboundCounter => Interlocked.Read(ref _outboundCounter);
+
         public Queue<TrafficPerSecond> trafficPerSecondQueue;
 
         private bool stopped = false;
@@ -192,13 +193,39 @@ namespace Shadowsocks.Controller
             try
             {
                 if (ssURL.IsNullOrEmpty() || ssURL.IsWhiteSpace()) return false;
-                var servers = Server.GetServers(ssURL);
+                List<Server> servers = Server.GetServers(ssURL);
                 if (servers == null || servers.Count == 0) return false;
-                foreach (var server in servers)
+                Dictionary<string, Server> destdic = _config.configs.ToDictionary(s => s.Identifier());
+                int savedcount = _config.configs.Count;
+                StringBuilder dups = new StringBuilder();
+                dups.AppendLine("Duplicated are not added: ");
+
+                for(int i = 0; i < servers.Count; i++)
                 {
-                    _config.configs.Add(server);
+                    Server server = servers[i];
+                    // assume there is no dup in servers itself
+                    string key = server.Identifier();
+                    if (!destdic.ContainsKey(key))
+                        _config.configs.Add(server);
+                    else
+                    {
+                        server = destdic[key];
+                        dups.AppendLine(server.FriendlyName());
+                    }
                 }
+
                 _config.index = _config.configs.Count - 1;
+                if (_config.index == savedcount - 1)
+                {
+                    MessageBox.Show("All new servers are dups, no server is added.");
+                    return false;
+                }
+
+                if ( servers.Count + savedcount > _config.index + 1 )
+                { // there must be dups
+                    MessageBox.Show(dups.ToString());
+                }
+                
                 SaveConfig(_config);
                 return true;
             }
@@ -264,6 +291,10 @@ namespace Shadowsocks.Controller
             }
         }
 
+        /// <summary>
+        /// strategy is set to null.
+        /// will cause controller reload
+        /// </summary>        
         public void SelectServerIndex(int index)
         {
             _config.index = index;
@@ -409,11 +440,7 @@ namespace Shadowsocks.Controller
         public void ToggleSecureLocalPac(bool enabled)
         {
             _config.secureLocalPac = enabled;
-            SaveConfig(_config);
-            if (ConfigChanged != null)
-            {
-                ConfigChanged(this, new EventArgs());
-            }
+            SaveConfig(_config); // will reload and raise ConfigChanged            
         }
 
         public void ToggleCheckingUpdate(bool enabled)
@@ -470,6 +497,14 @@ namespace Shadowsocks.Controller
             if (_config.availabilityStatistics)
             {
                 availabilityStatistics.UpdateOutboundCounter(server, n);
+            }
+        }
+
+        public void UpdateFail(Server server)
+        {            
+            if (_config.availabilityStatistics)
+            {
+                availabilityStatistics.UpdateFail(server);
             }
         }
 
