@@ -201,7 +201,7 @@ namespace Shadowsocks.Controller
         /// the low level timer proc for aggregating raw speed data and also ping test.
         /// for each server, 
         /// inspeed, outspeed, latency data are aggregated to a StatisticsRecord for the server.
-        /// if (ping), use MyPing (async) to measure response and PacketLoss,         
+        /// if (ping), use MyPing (async) to measure response and PingPassRate,         
         /// when each ping completed, the record is updated to RawStatistics
         /// when last ping is done, RawStatistics is Saved.
         /// </summary>
@@ -261,7 +261,7 @@ namespace Shadowsocks.Controller
             {
                 AppendRecord(server.Identifier(), record);
             }
-            Logging.Debug($"Ping {server.FriendlyName()} {e.RoundtripTime.Count} roundtrip times, {(100 - record.PacketLoss * 100)}% packet loss, min {record.MinResponse} ms, max {record.MaxResponse} ms, avg {record.AverageResponse} ms");
+            Logging.Debug($"Ping {server.FriendlyName()} {e.RoundtripTime.Count} roundtrip times, {(100 - record.PingPassRate * 100)}% packet loss, min {record.MinResponse} ms, max {record.MaxResponse} ms, avg {record.AverageResponse} ms");
             if (Interlocked.Decrement(ref state.counter) == 0)  // last server pinged?
             {
                 Save();

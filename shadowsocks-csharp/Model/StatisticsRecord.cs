@@ -46,10 +46,10 @@ namespace Shadowsocks.Model
         /// <summary>
         /// actually is the ratio of packets that succeeded.
         /// </summary>
-        public float? PacketLoss;
+        public float? PingPassRate;
 
         private bool EmptyResponseData
-            => (AverageResponse == null) && (MinResponse == null) && (MaxResponse == null) && (PacketLoss == null);
+            => (AverageResponse == null) && (MinResponse == null) && (MaxResponse == null) && (PingPassRate == null);
 
         public bool IsEmptyData() {
             return EmptyInboundSpeedData && EmptyOutboundSpeedData && EmptyResponseData && EmptyLatencyData
@@ -100,7 +100,7 @@ namespace Shadowsocks.Model
             AverageResponse = (int?) records.Average();
             MinResponse = records.Min();
             MaxResponse = records.Max();
-            PacketLoss = records.Count / (float) responseRecords.Count;
+            PingPassRate = records.Count / (float) responseRecords.Count;
         }
 
         /// <summary>

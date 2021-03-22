@@ -85,7 +85,7 @@
             this.valueLabel.Name = "valueLabel";
             this.valueLabel.Size = new System.Drawing.Size(118, 24);
             this.valueLabel.TabIndex = 7;
-            this.valueLabel.Text = "PacketLoss";
+            this.valueLabel.Text = "PingPassRate";
             // 
             // CalculationControl
             // 

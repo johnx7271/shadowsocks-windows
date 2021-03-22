@@ -71,8 +71,8 @@ namespace Shadowsocks.Controller.Strategy
             t = records.Select(record => record.MaxResponse).Average();
             averageRecord.MaxResponse = t == null ? null : (int?)(int)t.Value;
 
-            t = records.Select(record => record.PacketLoss).Average();
-            averageRecord.PacketLoss = t == null ? null : (float?)(float)t.Value;
+            t = records.Select(record => record.PingPassRate).Average();
+            averageRecord.PingPassRate = t == null ? null : (float?)(float)t.Value;
 
             averageRecord.FailCount = records.Select(record => record.FailCount).Average();
 

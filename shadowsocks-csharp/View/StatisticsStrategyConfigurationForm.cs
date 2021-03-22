@@ -131,7 +131,7 @@ namespace Shadowsocks.View
                                 dataGroup.Key,
                                 Speed = dataGroup.Average(data => data.AverageInboundSpeed) ?? 0,
                                 Ping = new int[2]{(int)(dataGroup.Average(data => data.AverageResponse) ?? 0),
-                                    100 - (int)(dataGroup.Average(data => data.PacketLoss) ?? 1) * 100 },
+                                    100 - (int)(dataGroup.Average(data => data.PingPassRate) ?? 1) * 100 },
                                 FailRate = dataGroup.Average(data => data.FailCount) ?? -0.001
                             };
 
