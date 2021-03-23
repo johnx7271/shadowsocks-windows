@@ -138,6 +138,7 @@ namespace Shadowsocks.Util.Sockets
             var r = asyncResult as FakeAsyncResult;
             if (r == null)
             {
+                // this should not happen.
                 throw new ArgumentException("Invalid asyncResult.", nameof(asyncResult));
             }
 

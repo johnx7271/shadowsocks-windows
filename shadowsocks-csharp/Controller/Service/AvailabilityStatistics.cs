@@ -43,9 +43,9 @@ namespace Shadowsocks.Controller
         private class InOutBoundRecord
         {
             private long _inbound;
-            private long _lastInbound;
+            //private long _lastInbound;
             private long _outbound;
-            private long _lastOutbound;
+            //private long _lastOutbound;
 
             public void UpdateInbound(long delta)
             {
@@ -57,16 +57,20 @@ namespace Shadowsocks.Controller
                 Interlocked.Add(ref _outbound, delta);
             }
 
-            public void GetDelta(out long inboundDelta, out long outboundDelta)
+            /// <summary>
+            /// get the accumulated result and reset the inner counter.
+            /// </summary>            
+            public void GetDelta(out long inboundResult, out long outboundResult)
             {
-                var i = Interlocked.Read(ref _inbound);
-                var il = Interlocked.Exchange(ref _lastInbound, i);
-                inboundDelta = i - il;
+                //var i = Interlocked.Read(ref _inbound);
+                //var il = Interlocked.Exchange(ref _lastInbound, i);
+                //inboundDelta = i - il;                
+                inboundResult = Interlocked.Exchange(ref _inbound, 0);
 
-
-                var o = Interlocked.Read(ref _outbound);
-                var ol = Interlocked.Exchange(ref _lastOutbound, o);
-                outboundDelta = o - ol;
+                //    var o = Interlocked.Read(ref _outbound);
+                //    var ol = Interlocked.Exchange(ref _lastOutbound, o);
+                //    outboundDelta = o - ol;
+                outboundResult = Interlocked.Exchange(ref _outbound, 0);
             }
         }
 
@@ -94,6 +98,9 @@ namespace Shadowsocks.Controller
         
         public static AvailabilityStatistics Instance { get; } = new AvailabilityStatistics();
 
+        /// <summary>
+        /// records in this are non-empty.
+        /// </summary>
         public Statistics RawStatistics { get; private set; }
 
         /// <summary>
@@ -324,7 +331,7 @@ namespace Shadowsocks.Controller
         {
             if (Config.ByHourOfDay)
             {
-                if (!record.Timestamp.Hour.Equals(DateTime.Now.Hour)) return false;
+                return (DateTime.Now - record.Timestamp).TotalSeconds <= 3600;
             }
             return true;
         }
@@ -370,13 +377,16 @@ namespace Shadowsocks.Controller
                     FilteredStatistics = new Statistics();
                 }
 
-                lock(RawStatistics)
+                Statistics newOne = new Statistics();
                 foreach (var serverAndRecords in RawStatistics)
                 {
                     var server = serverAndRecords.Key;
-                    var filteredRecords = serverAndRecords.Value.FindAll(IsValidRecord);
-                    FilteredStatistics[server] = filteredRecords;
+                    var filteredRecords = serverAndRecords.Value.FindAll(IsValidRecord);                    
+
+                    if(filteredRecords.Count > 0) // all the records are not empty and the list is not empty.
+                        newOne[server] = filteredRecords;
                 }
+                FilteredStatistics = newOne;
             }
             catch (Exception e)
             {

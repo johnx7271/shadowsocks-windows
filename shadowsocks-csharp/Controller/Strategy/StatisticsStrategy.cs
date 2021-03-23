@@ -19,19 +19,19 @@ namespace Shadowsocks.Controller.Strategy
         private HighAvailabilityStrategy _agent;
         private int _servercount;
 
-        private Statistics _filteredStatistics => 
+        private Statistics _filteredStatistics =>
                 _controller.availabilityStatistics.FilteredStatistics??
                 _controller.availabilityStatistics.RawStatistics;
-        
+
         public StatisticsStrategy(ShadowsocksController controller)
         {
             _controller = controller;
             var servers = controller.GetCurrentConfiguration().configs;
             _servercount = servers.Count;
             var randomIndex = new Random().Next() % _servercount;
-            
-            _agent = new HighAvailabilityStrategy(controller);                        
-        }        
+
+            _agent = new HighAvailabilityStrategy(controller);
+        }
 
         //return the score by data
         //server with highest score will be choosen
@@ -78,9 +78,8 @@ namespace Shadowsocks.Controller.Strategy
 
             foreach (var calculation in config.Calculations)
             {
-                var name = calculation.Key;
-                var field = typeof (StatisticsRecord).GetField(name);
-                dynamic value = field?.GetValue(averageRecord);
+                dynamic value = ReflectValue(averageRecord, calculation.Key);
+
                 var factor = calculation.Value;
                 if (value == null || factor.Equals(0)) continue;
                 score = score ?? 0;
@@ -93,6 +92,25 @@ namespace Shadowsocks.Controller.Strategy
             //}
             return score;
         }
+
+        static private Dictionary<string, System.Reflection.FieldInfo> _fieldIndoCache = GetFieldCache();
+        static private Dictionary<string, System.Reflection.FieldInfo> GetFieldCache()
+        {
+            Dictionary<string, System.Reflection.FieldInfo> fds = new Dictionary<string, System.Reflection.FieldInfo>();
+            Type t = typeof(StatisticsRecord);
+
+            foreach (var f in t.GetFields())
+                fds.Add(f.Name, f);
+            return fds;            
+        }
+
+        static dynamic ReflectValue(object o, string field)
+        {
+            System.Reflection.FieldInfo f = null;
+            if (_fieldIndoCache.TryGetValue(field, out f))
+                return f.GetValue(o);
+            else return null;            
+        }                
 
         private Server ChooseNewServer(List<Server> servers)
         {            

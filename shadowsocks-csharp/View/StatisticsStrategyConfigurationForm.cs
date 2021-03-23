@@ -120,8 +120,8 @@ namespace Shadowsocks.View
                 dataGroups = from data in statistics
                              let twentymin = (int) ((n - data.Timestamp).TotalSeconds / 1200)
                              where twentymin <= 24 * 3
-                             group data by twentymin;
-                ca.AxisX.Title = $"Time from now in units of 20 min";
+                             group data by twentymin;                
+                ca.AxisX.Title = $"Time from Now in units of 20 min";
             }
 
             var finalData = from dataGroup in dataGroups
