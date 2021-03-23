@@ -16,21 +16,21 @@ namespace Shadowsocks.Controller.Strategy
         private readonly ShadowsocksController _controller;
         private Server _currentServer;
 
-        private HighAvailabilityStrategy _agent;
+        private IStrategy _agent;
         private int _servercount;
 
         private Statistics _filteredStatistics =>
                 _controller.availabilityStatistics.FilteredStatistics??
                 _controller.availabilityStatistics.RawStatistics;
 
-        public StatisticsStrategy(ShadowsocksController controller)
+        public StatisticsStrategy(ShadowsocksController controller, IStrategy hagent)
         {
             _controller = controller;
             var servers = controller.GetCurrentConfiguration().configs;
             _servercount = servers.Count;
             var randomIndex = new Random().Next() % _servercount;
 
-            _agent = new HighAvailabilityStrategy(controller);
+            _agent = hagent;
         }
 
         //return the score by data
