@@ -1353,12 +1353,12 @@ namespace SimpleJson
     {
         internal CacheResolver _CacheResolver;
 
-        private static readonly string[] Iso8601Format = new string[]
-                                                             {
-                                                                 @"yyyy-MM-dd\THH:mm:ss.FFFFFFF\Z",
-                                                                 @"yyyy-MM-dd\THH:mm:ss\Z",
-                                                                 @"yyyy-MM-dd\THH:mm:ssK"
-                                                             };
+        //private static readonly string[] Iso8601Format = new string[]
+        //                                                     {
+        //                                                         @"yyyy-MM-dd\THH:mm:ss.FFFFFFF\Z",
+        //                                                         @"yyyy-MM-dd\THH:mm:ss\Z",
+        //                                                         @"yyyy-MM-dd\THH:mm:ssK"
+        //                                                     };
 
         public PocoJsonSerializerStrategy()
         {
@@ -1409,7 +1409,7 @@ namespace SimpleJson
                 if (!string.IsNullOrEmpty(str))
                 {
                     if (type == typeof(DateTime) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(DateTime)))
-                        obj = DateTime.ParseExact(str, Iso8601Format, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+                        obj = DateTime.ParseExact(str, "s", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).ToLocalTime();
                     else if (type == typeof(Guid) || (ReflectionUtils.IsNullableType(type) && Nullable.GetUnderlyingType(type) == typeof(Guid)))
                         obj = new Guid(str);
 					else
@@ -1537,7 +1537,7 @@ namespace SimpleJson
         {
             bool returnValue = true;
             if (input is DateTime)
-                output = ((DateTime)input).ToUniversalTime().ToString(Iso8601Format[0], CultureInfo.InvariantCulture);
+                output = ((DateTime)input).ToUniversalTime().ToString("s", CultureInfo.InvariantCulture);
             else if (input is Guid)
                 output = ((Guid)input).ToString("D");
             else if (input is Uri)
