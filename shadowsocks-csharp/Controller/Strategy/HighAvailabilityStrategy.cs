@@ -175,7 +175,8 @@ namespace Shadowsocks.Controller.Strategy
             ServerStatus status;
             if (_serverStatus.TryGetValue(server, out status))
             {
-                status.lastRead = DateTime.Now;
+                if(status.lastRead < status.lastWrite) // one write multiple read
+                    status.lastRead = DateTime.Now;
             }
         }
 
@@ -186,7 +187,11 @@ namespace Shadowsocks.Controller.Strategy
             ServerStatus status;
             if (_serverStatus.TryGetValue(server, out status))
             {
+                TimeSpan delta = status.lastRead - status.lastWrite;
                 status.lastWrite = DateTime.Now;
+                delta += delta;
+                if (delta.TotalSeconds > 100) delta = new TimeSpan(0, 0, 100);
+                status.lastRead += delta;
             }
         }
 

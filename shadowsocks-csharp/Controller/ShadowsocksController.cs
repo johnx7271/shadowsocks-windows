@@ -175,11 +175,12 @@ namespace Shadowsocks.Controller
             return plugin.LocalEndPoint;
         }
 
-        public void SaveServers(List<Server> servers, int localPort)
+        public void SaveServers(List<Server> servers, int localPort, bool postboneSaving = false)
         {
             _config.configs = servers;
             _config.localPort = localPort;
-            Configuration.Save(_config);
+            if(!postboneSaving)
+                Configuration.Save(_config);
         }
 
         public void SaveStrategyConfigurations(StatisticsStrategyConfiguration configuration)
@@ -421,20 +422,20 @@ namespace Shadowsocks.Controller
         {
             _config.pacUrl = pacUrl;
             SaveConfig(_config);
-            if (ConfigChanged != null)
-            {
-                ConfigChanged(this, new EventArgs());
-            }
+            //if (ConfigChanged != null)
+            //{
+            //    ConfigChanged(this, new EventArgs());
+            //}
         }
 
         public void UseOnlinePAC(bool useOnlinePac)
         {
             _config.useOnlinePac = useOnlinePac;
             SaveConfig(_config);
-            if (ConfigChanged != null)
-            {
-                ConfigChanged(this, new EventArgs());
-            }
+            //if (ConfigChanged != null)
+            //{
+            //    ConfigChanged(this, new EventArgs());
+            //}
         }
 
         public void ToggleSecureLocalPac(bool enabled)
@@ -589,6 +590,10 @@ namespace Shadowsocks.Controller
             GetPluginLocalEndPointIfConfigured(server);
         }
 
+        /// <summary>
+        /// will call config.save, and reload, which in turn
+        /// will fire ConfigChanged
+        /// </summary>        
         protected void SaveConfig(Configuration newConfig)
         {
             Configuration.Save(newConfig);

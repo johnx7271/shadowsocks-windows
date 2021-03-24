@@ -19,6 +19,7 @@ namespace Shadowsocks.View
         // this is a copy of configuration that we are working on
         private Configuration _modifiedConfiguration;
         private int _lastSelectedIndex = -1;
+        private bool _savingConfig = false;
 
         public ConfigForm(ShadowsocksController controller)
         {
@@ -63,7 +64,8 @@ namespace Shadowsocks.View
 
         private void controller_ConfigChanged(object sender, EventArgs e)
         {
-            LoadCurrentConfiguration();
+            if(!_savingConfig)
+                LoadCurrentConfiguration();
         }
 
         private void ShowWindow()
@@ -142,7 +144,7 @@ namespace Shadowsocks.View
             }
         }
 
-        private void LoadConfiguration()
+        private void LoadServerlistbox()
         {
             ServersListBox.Items.Clear();
             foreach (Server server in _modifiedConfiguration.configs)
@@ -154,7 +156,7 @@ namespace Shadowsocks.View
         private void LoadCurrentConfiguration()
         {
             _modifiedConfiguration = controller.GetConfigurationCopy();
-            LoadConfiguration();
+            LoadServerlistbox();
             _lastSelectedIndex = _modifiedConfiguration.index;
             if (_lastSelectedIndex < 0 || _lastSelectedIndex >= ServersListBox.Items.Count)
             {
@@ -172,7 +174,7 @@ namespace Shadowsocks.View
 
         private void ConfigForm_KeyDown(object sender, KeyEventArgs e)
         {
-            // Sometimes the users may hit enter key by mistake, and the form will close without saving entries.
+            // Sometimes the users may hit enter key by mistake, save without close.
 
             if (e.KeyCode == Keys.Enter)
             {                
@@ -186,10 +188,10 @@ namespace Shadowsocks.View
                     return;
                 }
                 //_modifiedConfiguration
-                controller.SaveServers(_modifiedConfiguration.configs, _modifiedConfiguration.localPort);
-
-                if(_lastSelectedIndex >= 0)
-                    controller.SelectServerIndex(_lastSelectedIndex);
+                controller.SaveServers(_modifiedConfiguration.configs, _modifiedConfiguration.localPort, true);
+                _savingConfig = true;
+                controller.SelectServerIndex(ServersListBox.SelectedIndex);
+                _savingConfig = false;
             }
 
         }
@@ -227,7 +229,7 @@ namespace Shadowsocks.View
             }
             Server server = Configuration.GetDefaultServer();
             _modifiedConfiguration.configs.Add(server);
-            LoadConfiguration();
+            LoadServerlistbox();
             ServersListBox.SelectedIndex = _modifiedConfiguration.configs.Count - 1;
             _lastSelectedIndex = ServersListBox.SelectedIndex;
         }
@@ -241,7 +243,7 @@ namespace Shadowsocks.View
             Server currServer = _modifiedConfiguration.configs[_lastSelectedIndex];
             var currIndex = _modifiedConfiguration.configs.IndexOf( currServer );
             _modifiedConfiguration.configs.Insert(currIndex + 1, currServer);
-            LoadConfiguration();
+            LoadServerlistbox();
             ServersListBox.SelectedIndex = currIndex + 1;
             _lastSelectedIndex = ServersListBox.SelectedIndex;
         }
@@ -258,8 +260,8 @@ namespace Shadowsocks.View
                 // can be -1
                 _lastSelectedIndex = _modifiedConfiguration.configs.Count - 1;
             }
-            
-            LoadConfiguration();
+
+            LoadServerlistbox();
             ServersListBox.SelectedIndex = _lastSelectedIndex;
             LoadSelectedServer();
         }
@@ -275,9 +277,10 @@ namespace Shadowsocks.View
                 MessageBox.Show(I18N.GetString("Please add at least one server"));
                 return;
             }
-            controller.SaveServers(_modifiedConfiguration.configs, _modifiedConfiguration.localPort);
-            
+            controller.SaveServers(_modifiedConfiguration.configs, _modifiedConfiguration.localPort, true);
+            _savingConfig = true;
             controller.SelectServerIndex(ServersListBox.SelectedIndex);
+            _savingConfig = false;
             this.Close();
         }
 

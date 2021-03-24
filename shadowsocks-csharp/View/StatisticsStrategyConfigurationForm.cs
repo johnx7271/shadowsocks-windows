@@ -40,7 +40,10 @@ namespace Shadowsocks.View
 
         private void controller_ConfigChanged(Object sender, EventArgs args)
         {
-            LoadConfiguration();
+            var configs = _controller.GetCurrentConfiguration().configs;
+            _servers = configs.Select(server => server.Identifier()).ToList();
+            serverSelector.DataSource = _servers;
+            serverSelector.SelectedIndex = _servers.Count > 0 ? 0 : -1;
         }
 
         private void LoadConfiguration()
