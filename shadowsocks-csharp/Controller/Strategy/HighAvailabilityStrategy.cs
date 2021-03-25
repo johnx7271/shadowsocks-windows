@@ -117,15 +117,19 @@ namespace Shadowsocks.Controller.Strategy
             DateTime now = DateTime.Now;
             foreach (var status in servers)
             {
-                double successReponseInterval = (status.lastRead - status.lastWrite).TotalMilliseconds;
-                // (lastread-lastwrite) is also a meassure of server latency
-
-                // all of failure, latency, (lastread - lastwrite) normalized to ms, then
-                // 10* failure - latency - 1000 / (lastread - lastwrite)
-                status.score = 10 * Math.Max(2, (now - status.lastFailure).TotalSeconds)
-                    - status.latency.TotalSeconds / (1 + (now - status.lastTimeDetectLatency).TotalMinutes / 5)                    
-                    + 1000 / Math.Max(0.1, successReponseInterval);
-                //Logging.Debug(String.Format("server: {0} latency:{1} score: {2}", status.server.FriendlyName(), status.latency, status.score));
+                double successReponseInterval; 
+                lock(status)
+                    successReponseInterval = (status.lastRead - status.lastWrite).TotalMilliseconds;
+                
+                // (lastread-lastwrite) is also a meassure of server latency                
+                // 10s elapsed since lastfail = 100 ms latence delta
+                status.score = 10 * (now - status.lastFailure).TotalSeconds
+                    - status.latency.TotalMilliseconds/ (1 + (now - status.lastTimeDetectLatency).TotalMinutes)                                        
+                    + 100000 / Math.Max(0.2, successReponseInterval/ (0.5 + (now - status.lastRead).TotalMinutes));
+                Logging.Info(String.Format("ha server: {0} latency:{1} latime: {2:HH:mm:ss} \r\n" +
+                    " score: {3} Read: {4:HH:mm:ss} Write: {5:HH:mm:ss} Fail: {6:HH:mm:ss}", 
+                    status.server.FriendlyName(), status.latency, status.lastTimeDetectLatency,
+                    status.score, status.lastRead, status.lastWrite, status.lastFailure));
             }
             ServerStatus max = null;
             foreach (var status in servers)
@@ -175,6 +179,7 @@ namespace Shadowsocks.Controller.Strategy
             ServerStatus status;
             if (_serverStatus.TryGetValue(server, out status))
             {
+                lock(status)
                 if(status.lastRead < status.lastWrite) // one write multiple read
                     status.lastRead = DateTime.Now;
             }
@@ -183,15 +188,26 @@ namespace Shadowsocks.Controller.Strategy
         public void UpdateLastWrite(Model.Server server)
         {
             Logging.Debug($"last write: {server.FriendlyName()}");
-
+            TimeSpan delta = new TimeSpan();
             ServerStatus status;
+
             if (_serverStatus.TryGetValue(server, out status))
             {
-                TimeSpan delta = status.lastRead - status.lastWrite;
-                status.lastWrite = DateTime.Now;
-                delta += delta;
-                if (delta.TotalSeconds > 100) delta = new TimeSpan(0, 0, 100);
-                status.lastRead += delta;
+                try
+                {
+                    lock (status)
+                    {
+                        delta = status.lastRead - status.lastWrite;
+                        status.lastWrite = DateTime.Now;
+                        delta += TimeSpan.FromTicks(delta.Ticks/5);
+                        if (delta.TotalSeconds > 100) delta = new TimeSpan(0, 0, 100);
+                        status.lastRead = status.lastWrite + delta;
+                    }
+                }catch(Exception ex)
+                {
+                    Logging.Info(ex.Message);
+                    Logging.Info($"LastRead: {status.lastRead} LastWrite: {status.lastRead} delta: {delta}");
+                }
             }
         }
 
