@@ -23,7 +23,7 @@ namespace Shadowsocks.View
         private readonly Series _failRateSeries;
         private readonly Series _pingSeries;
         private double _y2Max;
-        private double _failRateMax;
+        private int _failRateMax;
 
         public StatisticsStrategyConfigurationForm(ShadowsocksController controller)
         {
@@ -149,7 +149,7 @@ namespace Shadowsocks.View
                 _dataTable.Rows.Add(data.Key, data.Speed, data.Ping, data.FailRate);                
             }
             _y2Max = Round(pingmax);
-            _failRateMax = Round(rateMax < 0 ? 1 : rateMax);
+            _failRateMax = (int) Round(rateMax < 0 ? 1 : rateMax);
         }
 
         private void BindPingData()
@@ -158,7 +158,7 @@ namespace Shadowsocks.View
             Axis y2 = ca.AxisY2;
             y2.Maximum = _y2Max;
             double rate = _y2Max / _failRateMax;
-
+            
             _pingSeries.Points.Clear();
             foreach (DataRow row in _dataTable.Rows)
             {
@@ -168,9 +168,12 @@ namespace Shadowsocks.View
                 r[3] = (float)(r[3]) * rate;
                 row.ItemArray = r;
             }
-            y2.Title = $"Ping in ms\nFailRate * {(int)rate}";
+            y2.Title = $"Ping in ms\nFailRate * {rate:0.##}";
         }
 
+        /// <summary>
+        /// if f<1 return 1; else return a integer that is f round to its highest digit.
+        /// </summary>        
         static public double Round(double f)
         {
             int scale = 1;             

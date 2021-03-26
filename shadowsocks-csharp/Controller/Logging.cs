@@ -112,22 +112,27 @@ namespace Shadowsocks.Controller
                 {
                     // closed by browser when sending
                     // normally happens when download is canceled or a tab is closed before page is loaded
+                    Debug("Socket Aborted.");
                 }
                 else if (se.SocketErrorCode == SocketError.ConnectionReset)
                 {
                     // received rst
+                    Debug("Socket Reset.");
                 }
                 else if (se.SocketErrorCode == SocketError.NotConnected)
                 {
                     // The application tried to send or receive data, and the System.Net.Sockets.Socket is not connected.
+                    Debug("Socket NotConnected");
                 }
                 else if (se.SocketErrorCode == SocketError.HostUnreachable)
                 {
                     // There is no network route to the specified host.
+                    Debug("Socket HostUnreachable.");
                 }
                 else if (se.SocketErrorCode == SocketError.TimedOut)
                 {
                     // The connection attempt timed out, or the connected host has failed to respond.
+                    Debug("Socket TimedOut");
                 }
                 else
                 {
@@ -136,6 +141,7 @@ namespace Shadowsocks.Controller
             }
             else if (e is ObjectDisposedException)
             {
+                Debug("ObjectDisposedEx.");
             }
             else if (e is Win32Exception)
             {

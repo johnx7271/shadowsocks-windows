@@ -48,7 +48,7 @@ namespace Shadowsocks.Controller
                 {
                     _lastSweepTime = now;
                     foreach (TCPHandler handler1 in Handlers)
-                        if (now - handler1.lastActivity > TimeSpan.FromSeconds(900))
+                        if (now - handler1.lastActivity > TimeSpan.FromSeconds(100))  // more than enough
                             handlersToClose.Add(handler1);
                 }
             }
@@ -474,7 +474,7 @@ namespace Shadowsocks.Controller
                 }
                 else
                 {
-                    Logging.Debug("failed to recv data in Shadowsocks.Controller.TCPHandler.OnAddressFullyRead()");
+                    Logging.Info("failed to recv data in Shadowsocks.Controller.TCPHandler.OnAddressFullyRead()");
                     Close();
                 }
             }
@@ -642,7 +642,6 @@ namespace Shadowsocks.Controller
             timer.Enabled = false;
             timer.Dispose();
 
-
             if (_proxyConnected || _destConnected || _closed)
             {
                 return;
@@ -701,13 +700,14 @@ namespace Shadowsocks.Controller
             }
             catch (ArgumentException)
             {
+                Logging.Error("strange ArgumentException.");
             }
             catch (Exception e)
             {
                 Logging.LogUsefulException(e);
                 Close();
             }
-            ReportFailure(server);            
+            ReportFailure(server);
         }
 
         private void DestConnectTimer_Elapsed(object sender, ElapsedEventArgs e)
@@ -762,6 +762,8 @@ namespace Shadowsocks.Controller
             }
             catch (ArgumentException)
             {
+                ReportFailure(_server);
+                Logging.Error("strange ArgumentException.");                
             }
             catch (Exception e)
             {                
@@ -885,6 +887,7 @@ namespace Shadowsocks.Controller
             {
                 Logging.LogUsefulException(e);
                 Close();
+                ReportFailure(_server);
             }
         }
 
@@ -900,7 +903,7 @@ namespace Shadowsocks.Controller
                 }
                 catch (CryptoErrorException)
                 {
-                    Logging.Debug("encryption error");
+                    Logging.Error("encryption error");
                     Close();
                     ReportFailure(_server);
                     return;

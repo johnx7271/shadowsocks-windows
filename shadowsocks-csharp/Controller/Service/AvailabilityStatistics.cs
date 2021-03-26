@@ -268,7 +268,7 @@ namespace Shadowsocks.Controller
             {
                 AppendRecord(server.Identifier(), record);
             }
-            Logging.Debug($"Ping {server.FriendlyName()} {e.RoundtripTime.Count} roundtrip times, {(100 - record.PingPassRate * 100)}% packet loss, min {record.MinResponse} ms, max {record.MaxResponse} ms, avg {record.AverageResponse} ms");
+            // Logging.Debug($"Ping {server.FriendlyName()} {e.RoundtripTime.Count} roundtrip times, {(100 - record.PingPassRate * 100)}% packet loss, min {record.MinResponse} ms, max {record.MaxResponse} ms, avg {record.AverageResponse} ms");
             if (Interlocked.Decrement(ref state.counter) == 0)  // last server pinged?
             {
                 Save();

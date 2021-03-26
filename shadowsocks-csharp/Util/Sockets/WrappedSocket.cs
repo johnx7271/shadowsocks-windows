@@ -95,6 +95,7 @@ namespace Shadowsocks.Util.Sockets
                     {
                         _socketSyncLock.TryEnter(ref lockTaken);
                     }
+                    // lock is not garranteed here, shouldn't check?
                     try
                     {
                         if (Connected)
@@ -138,7 +139,7 @@ namespace Shadowsocks.Util.Sockets
             var r = asyncResult as FakeAsyncResult;
             if (r == null)
             {
-                // this should not happen.
+                // this should not happen, but is observed, why?
                 throw new ArgumentException("Invalid asyncResult.", nameof(asyncResult));
             }
 
@@ -161,6 +162,7 @@ namespace Shadowsocks.Util.Sockets
             }
             try
             {
+                // lock is not garranteed here, shouldn't check?
                 _disposed = true;
                 _activeSocket?.FullClose();
             }
