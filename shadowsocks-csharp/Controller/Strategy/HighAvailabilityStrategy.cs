@@ -94,7 +94,7 @@ namespace Shadowsocks.Controller.Strategy
             }            
 
             _serverStatus = newServerStatus;
-
+            _currentServer = null;
             ChooseNewServer();
         }
 
@@ -159,7 +159,7 @@ namespace Shadowsocks.Controller.Strategy
             }
             if (max != null)
             {
-                if (_currentServer == null || max.score - _currentServer.score > 200)
+                if (_currentServer == null || max.score - _currentServer.score > 10)
                 {
                     _currentServer = max;
                     Logging.Info($"HA switching to server: {_currentServer.server.FriendlyName()}");
